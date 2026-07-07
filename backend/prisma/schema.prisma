@@ -1,0 +1,49 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model ImportRun {
+  id                String   @id @default(uuid())
+  createdAt         DateTime @default(now()) @map("created_at")
+  status            String   // PENDING, PROCESSING, COMPLETED, FAILED
+  fileName          String   @map("file_name")
+  totalRecords      Int      @map("total_records")
+  processedRecords  Int      @default(0) @map("processed_records")
+  skippedRecords    Int      @default(0) @map("skipped_records")
+  leads             Lead[]
+
+  @@map("import_runs")
+  @@index([createdAt])
+}
+
+model Lead {
+  id                        String     @id @default(uuid())
+  importId                  String     @map("import_id")
+  importRun                 ImportRun  @relation(fields: [importId], references: [id], onDelete: Cascade)
+  createdAt                 DateTime   @default(now()) @map("created_at")
+  name                      String?
+  email                     String?
+  countryCode               String?    @map("country_code")
+  mobileWithoutCountryCode  String?    @map("mobile_without_country_code")
+  company                   String?
+  city                      String?
+  state                     String?
+  country                   String?
+  leadOwner                 String?    @map("lead_owner")
+  crmStatus                 String?    @map("crm_status") // GOOD_LEAD_FOLLOW_UP, DID_NOT_CONNECT, BAD_LEAD, SALE_DONE
+  crmNote                   String?    @map("crm_note")
+  dataSource                String?    @map("data_source") // leads_on_demand, meridian_tower, eden_park, varah_swamy, sarjapur_plots
+  possessionTime            String?    @map("possession_time")
+  description               String?
+  deletedAt                 DateTime?  @map("deleted_at")
+
+  @@map("leads")
+  @@index([email])
+  @@index([mobileWithoutCountryCode])
+  @@index([importId, crmStatus])
+}
