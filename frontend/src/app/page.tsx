@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Upload, 
-  FileSpreadsheet, 
-  CheckCircle2, 
-  XCircle, 
-  RefreshCw, 
-  History, 
+import {
+  Upload,
+  FileSpreadsheet,
+  CheckCircle2,
+  XCircle,
+  RefreshCw,
+  History,
   AlertCircle,
   Database,
   Search,
@@ -46,7 +46,7 @@ export default function Home() {
   } | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [file, setFile] = useState<File | null>(null);
-  
+
   // State for Step 2: Preview
   const [uploadData, setUploadData] = useState<{
     runId: string;
@@ -62,7 +62,7 @@ export default function Home() {
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState('');
   const [stats, setStats] = useState<{ processed: number; skipped: number } | null>(null);
-  
+
   // Final Results
   const [importResult, setImportResult] = useState<{
     runId: string;
@@ -78,7 +78,7 @@ export default function Home() {
   const [dbLeads, setDbLeads] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sseRef = useRef<EventSource | null>(null);
 
@@ -143,7 +143,7 @@ export default function Home() {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    
+
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const droppedFile = e.dataTransfer.files[0];
       if (droppedFile.name.endsWith('.csv')) {
@@ -202,7 +202,7 @@ export default function Home() {
 
     try {
       // BUG FIX: Send the (possibly pruned) rows to the confirm endpoint.
-      // The worker has NOT processed anything yet — upload only parsed and stored rows.
+      // The worker has NOT processed anything yet - upload only parsed and stored rows.
       const confirmRes = await fetch(`${API_BASE}/imports/${uploadData.runId}/confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -220,7 +220,7 @@ export default function Home() {
       if (uploadData.previewRows.length === 0) {
         setImportStep(3);
         setIsProcessing(false);
-        setStatusMessage('Import completed — 0 records were selected for import.');
+        setStatusMessage('Import completed - 0 records were selected for import.');
         setImportResult({
           ...uploadData,
           processedRecords: 0,
@@ -293,7 +293,7 @@ export default function Home() {
     if (!uploadData) return;
     const updatedRows = [...uploadData.previewRows];
     updatedRows.splice(rowIdxToRemove, 1);
-    
+
     setUploadData({
       ...uploadData,
       totalRecords: uploadData.totalRecords - 1,
@@ -319,7 +319,7 @@ export default function Home() {
     }
   };
 
-  // Confirm handler — runs the right deletion based on dialog type
+  // Confirm handler - runs the right deletion based on dialog type
   const handleConfirmDelete = async () => {
     if (!confirmDialog) return;
     if (confirmDialog.type === 'lead' && confirmDialog.leadId) {
@@ -389,26 +389,24 @@ export default function Home() {
         <nav className="flex-1 px-4 py-6 space-y-6 overflow-y-auto">
           <div className="space-y-1">
             <span className="px-3 text-[10px] uppercase tracking-wider font-bold text-neutral-600 block mb-2">Main Functions</span>
-            
-            <button 
+
+            <button
               onClick={() => setActiveView('manage')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all ${
-                activeView === 'manage' 
-                  ? 'bg-neutral-900/80 text-teal-400 border border-neutral-800/40 shadow-inner' 
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all ${activeView === 'manage'
+                  ? 'bg-neutral-900/80 text-teal-400 border border-neutral-800/40 shadow-inner'
                   : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900/30'
-              }`}
+                }`}
             >
               <Users className="w-4 h-4" />
               Manage Leads
             </button>
 
-            <button 
+            <button
               onClick={() => setActiveView('history')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all ${
-                activeView === 'history' 
-                  ? 'bg-neutral-900/80 text-teal-400 border border-neutral-800/40 shadow-inner' 
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all ${activeView === 'history'
+                  ? 'bg-neutral-900/80 text-teal-400 border border-neutral-800/40 shadow-inner'
                   : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900/30'
-              }`}
+                }`}
             >
               <Layers className="w-4 h-4" />
               Lead Source Logs
@@ -453,7 +451,7 @@ export default function Home() {
                 <p className="text-xs text-neutral-500 mt-1 font-medium">Monitor lead status, verify dynamic properties, and check ingestion streams.</p>
               </div>
               <div>
-                <button 
+                <button
                   onClick={() => setShowImportModal(true)}
                   className="px-5 py-3 bg-neutral-100 hover:bg-neutral-200 text-neutral-950 text-xs font-bold rounded-xl shadow-lg transition-all duration-300 active:scale-[0.98]"
                 >
@@ -465,7 +463,7 @@ export default function Home() {
             <div className="px-8 py-5 border-b border-neutral-900/20 bg-neutral-950/10 flex flex-col sm:flex-row justify-between items-center gap-4">
               <div className="relative w-full sm:max-w-xs">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
-                <input 
+                <input
                   type="text"
                   placeholder="Enter email or phone number..."
                   value={searchQuery}
@@ -475,7 +473,7 @@ export default function Home() {
               </div>
 
               <div className="flex gap-2.5 w-full sm:w-auto justify-end">
-                <button 
+                <button
                   onClick={fetchLeads}
                   className="p-2.5 bg-neutral-900/50 border border-neutral-800/80 rounded-xl text-neutral-400 hover:text-neutral-200 transition-all active:scale-[0.96]"
                 >
@@ -490,7 +488,7 @@ export default function Home() {
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="bg-neutral-950/40 text-neutral-400 font-bold border-b border-neutral-900/40">
-                        {/* Sticky X column — always visible on left */}
+                        {/* Sticky X column - always visible on left */}
                         <th className="p-3 w-10 sticky left-0 z-20 bg-neutral-950/90 backdrop-blur-sm"></th>
                         <th className="p-4 font-semibold">Lead Name</th>
                         <th className="p-4 font-semibold">Email</th>
@@ -504,7 +502,7 @@ export default function Home() {
                     <tbody>
                       {filteredLeads.map((lead, idx) => (
                         <tr key={lead.id ?? idx} className="border-b border-neutral-900/20 hover:bg-neutral-900/10 text-neutral-300 transition-colors group">
-                          {/* Red X — sticky left, opens confirmation dialog */}
+                          {/* Red X - sticky left, opens confirmation dialog */}
                           <td className="p-3 sticky left-0 z-10 bg-neutral-950 group-hover:bg-neutral-900/80 backdrop-blur-sm transition-colors">
                             <button
                               onClick={() => setConfirmDialog({
@@ -528,12 +526,11 @@ export default function Home() {
                           </td>
                           <td className="p-4 whitespace-nowrap text-neutral-400">{lead.company || '-'}</td>
                           <td className="p-4 whitespace-nowrap">
-                            <span className={`px-2.5 py-1 rounded text-[10px] font-bold ${
-                              lead.crmStatus === 'SALE_DONE' ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-900/30' :
-                              lead.crmStatus === 'GOOD_LEAD_FOLLOW_UP' ? 'bg-teal-950/40 text-teal-400 border border-teal-900/30' :
-                              lead.crmStatus === 'DID_NOT_CONNECT' ? 'bg-amber-950/40 text-amber-400 border border-amber-900/30' :
-                              'bg-red-950/40 text-red-400 border border-red-900/30'
-                            }`}>
+                            <span className={`px-2.5 py-1 rounded text-[10px] font-bold ${lead.crmStatus === 'SALE_DONE' ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-900/30' :
+                                lead.crmStatus === 'GOOD_LEAD_FOLLOW_UP' ? 'bg-teal-950/40 text-teal-400 border border-teal-900/30' :
+                                  lead.crmStatus === 'DID_NOT_CONNECT' ? 'bg-amber-950/40 text-amber-400 border border-amber-900/30' :
+                                    'bg-red-950/40 text-red-400 border border-red-900/30'
+                              }`}>
                               {lead.crmStatus}
                             </span>
                           </td>
@@ -581,11 +578,10 @@ export default function Home() {
                       <td className="p-4 text-neutral-500 whitespace-nowrap">{new Date(run.createdAt).toLocaleString()}</td>
                       <td className="p-4 font-bold whitespace-nowrap text-neutral-200">{run.fileName}</td>
                       <td className="p-4 whitespace-nowrap">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          run.status === 'COMPLETED' ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-900/30' :
-                          run.status === 'PROCESSING' ? 'bg-teal-950/40 text-teal-400 border border-teal-900/30' :
-                          'bg-amber-950/40 text-amber-400 border border-amber-900/30'
-                        }`}>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${run.status === 'COMPLETED' ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-900/30' :
+                            run.status === 'PROCESSING' ? 'bg-teal-950/40 text-teal-400 border border-teal-900/30' :
+                              'bg-amber-950/40 text-amber-400 border border-amber-900/30'
+                          }`}>
                           {run.status}
                         </span>
                       </td>
@@ -628,7 +624,7 @@ export default function Home() {
         )}
       </div>
 
-      {/* Stepped Import Wizard Modal — dynamically sized per step */}
+      {/* Stepped Import Wizard Modal - dynamically sized per step */}
       {showImportModal && (
         <div className="fixed inset-0 bg-neutral-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div
@@ -641,7 +637,7 @@ export default function Home() {
               minHeight: importStep === 2 ? 'auto' : '420px'
             }}
           >
-            
+
             {/* Modal Header: Glaring line removed */}
             <div className="px-8 py-5 bg-neutral-900/40 flex justify-between items-center h-[80px] shrink-0">
               <div className="flex items-center gap-6">
@@ -656,7 +652,7 @@ export default function Home() {
                   </div>
                 )}
               </div>
-              <button 
+              <button
                 onClick={closeImportModal}
                 className="p-1.5 hover:bg-neutral-800 rounded-lg text-neutral-500 hover:text-neutral-300 transition-all"
               >
@@ -667,27 +663,24 @@ export default function Home() {
             {/* Stepper Progress Indicator: Glaring line removed */}
             <div className="px-8 py-3 bg-neutral-900/20 flex gap-8 items-center h-[50px] shrink-0">
               <div className="flex items-center gap-2">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                  importStep >= 1 ? 'bg-teal-500 text-neutral-950' : 'bg-neutral-800 text-neutral-500'
-                }`}>
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${importStep >= 1 ? 'bg-teal-500 text-neutral-950' : 'bg-neutral-800 text-neutral-500'
+                  }`}>
                   {importStep > 1 ? <Check className="w-3 h-3 text-neutral-950 stroke-[3]" /> : '1'}
                 </div>
                 <span className="text-[10px] uppercase tracking-wider font-bold text-neutral-400">Upload</span>
               </div>
 
               <div className="flex items-center gap-2">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                  importStep >= 2 ? 'bg-teal-500 text-neutral-950' : 'bg-neutral-800 text-neutral-500'
-                }`}>
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${importStep >= 2 ? 'bg-teal-500 text-neutral-950' : 'bg-neutral-800 text-neutral-500'
+                  }`}>
                   {importStep > 2 ? <Check className="w-3 h-3 text-neutral-950 stroke-[3]" /> : '2'}
                 </div>
                 <span className="text-[10px] uppercase tracking-wider font-bold text-neutral-400">Preview</span>
               </div>
 
               <div className="flex items-center gap-2">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                  importStep >= 3 ? 'bg-teal-500 text-neutral-950' : 'bg-neutral-800 text-neutral-500'
-                }`}>
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${importStep >= 3 ? 'bg-teal-500 text-neutral-950' : 'bg-neutral-800 text-neutral-500'
+                  }`}>
                   3
                 </div>
                 <span className="text-[10px] uppercase tracking-wider font-bold text-neutral-400">Process</span>
@@ -696,29 +689,28 @@ export default function Home() {
 
             {/* Modal Body */}
             <div className="flex-1 overflow-hidden relative bg-neutral-950/20">
-              
+
               {/* Step 1: Upload Dropzone */}
               {importStep === 1 && (
                 <div className="p-8 h-full flex flex-col justify-center space-y-6">
-                  <div 
+                  <div
                     onDragEnter={handleDrag}
                     onDragOver={handleDrag}
                     onDragLeave={handleDrag}
                     onDrop={handleDrop}
                     onClick={() => fileInputRef.current?.click()}
-                    className={`border-2 border-dashed rounded-2xl p-16 text-center cursor-pointer transition-all duration-300 relative overflow-hidden group max-w-xl mx-auto w-full ${
-                      dragActive 
-                        ? 'border-teal-500 bg-teal-950/10 shadow-lg shadow-teal-500/5' 
+                    className={`border-2 border-dashed rounded-2xl p-16 text-center cursor-pointer transition-all duration-300 relative overflow-hidden group max-w-xl mx-auto w-full ${dragActive
+                        ? 'border-teal-500 bg-teal-950/10 shadow-lg shadow-teal-500/5'
                         : 'border-neutral-800 hover:border-neutral-700 bg-neutral-900/10'
-                    }`}
+                      }`}
                   >
                     <label htmlFor="modal-csv-input" className="sr-only">Upload CSV File</label>
-                    <input 
-                      type="file" 
+                    <input
+                      type="file"
                       id="modal-csv-input"
-                      ref={fileInputRef} 
-                      onChange={handleFileChange} 
-                      className="hidden" 
+                      ref={fileInputRef}
+                      onChange={handleFileChange}
+                      className="hidden"
                       accept=".csv"
                     />
                     <div className="w-12 h-12 bg-neutral-950 rounded-xl flex items-center justify-center mx-auto mb-4 border border-neutral-800">
@@ -744,7 +736,7 @@ export default function Home() {
                 <div className="h-full flex flex-col p-8 space-y-4">
                   <div className="relative w-full max-w-xs shrink-0">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500" />
-                    <input 
+                    <input
                       type="text"
                       placeholder="Search preview rows..."
                       onChange={(e) => {
@@ -771,16 +763,15 @@ export default function Home() {
                       </thead>
                       <tbody>
                         {uploadData.previewRows.map((row, rowIdx) => (
-                          <tr 
-                            key={rowIdx} 
-                            className={`preview-row border-b border-neutral-900/20 text-neutral-300 transition-colors ${
-                              rowIdx % 2 === 0 ? 'bg-neutral-900' : 'bg-neutral-950/40'
-                            }`}
+                          <tr
+                            key={rowIdx}
+                            className={`preview-row border-b border-neutral-900/20 text-neutral-300 transition-colors ${rowIdx % 2 === 0 ? 'bg-neutral-900' : 'bg-neutral-950/40'
+                              }`}
                           >
                             {Object.values(row).map((val: any, valIdx) => (
                               <td key={valIdx} className="p-4 whitespace-nowrap text-neutral-400">{String(val || '')}</td>
                             ))}
-                            {/* Red X — opens confirmation before removing from preview */}
+                            {/* Red X - opens confirmation before removing from preview */}
                             <td className="p-4 text-right whitespace-nowrap">
                               <button
                                 onClick={() => setConfirmDialog({
@@ -814,7 +805,7 @@ export default function Home() {
 
                       {/* Wide Thicker Ingestion Progress Bar (Height 12px) */}
                       <div className="w-full bg-neutral-950 rounded-full h-3 overflow-hidden border border-neutral-900/30">
-                        <div 
+                        <div
                           className="bg-gradient-to-r from-teal-500 to-emerald-500 h-full transition-all duration-300 rounded-full"
                           style={{ width: `${progress}%` }}
                         ></div>
@@ -870,16 +861,16 @@ export default function Home() {
                   </span>
                 )}
               </div>
-              
+
               <div className="flex gap-3">
-                <button 
+                <button
                   onClick={closeImportModal}
                   className="px-5 py-2.5 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs font-bold rounded-xl text-neutral-400 hover:text-neutral-200 transition-all duration-300"
                 >
                   Cancel
                 </button>
                 {importStep === 2 && uploadData && (
-                  <button 
+                  <button
                     onClick={startImportPipeline}
                     disabled={isModalAnimating}
                     className="px-5 py-2.5 bg-neutral-100 hover:bg-neutral-200 disabled:opacity-50 text-neutral-950 text-xs font-bold rounded-xl shadow-lg transition-all duration-300"
@@ -888,7 +879,7 @@ export default function Home() {
                   </button>
                 )}
                 {importStep === 3 && !isProcessing && (
-                  <button 
+                  <button
                     onClick={closeImportModal}
                     className="px-5 py-2.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-950 text-xs font-bold rounded-xl shadow-lg transition-all duration-300"
                   >
@@ -927,9 +918,8 @@ export default function Home() {
                   </h3>
                   <p className="text-xs text-neutral-400 mt-2 leading-relaxed">
                     {confirmDialog.type === 'lead'
-                      ? `This action is permanent and cannot be undone — once deleted, ${
-                          confirmDialog.leadName ? `"${confirmDialog.leadName}"` : 'this lead'
-                        } will be removed from the database and all associated data will be lost forever.`
+                      ? `This action is permanent and cannot be undone - once deleted, ${confirmDialog.leadName ? `"${confirmDialog.leadName}"` : 'this lead'
+                      } will be removed from the database and all associated data will be lost forever.`
                       : 'This record will be excluded from the upcoming import. You can always re-upload the CSV file if you change your mind, but this action cannot be undone within the current session.'}
                   </p>
                 </div>

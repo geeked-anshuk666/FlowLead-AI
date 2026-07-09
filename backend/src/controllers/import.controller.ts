@@ -16,7 +16,7 @@ const pendingRowsStore = new Map<string, any[]>();
 export class ImportController {
   /**
    * Upload CSV file, parse locally, store PENDING state in DB.
-   * Does NOT publish to worker queue yet — waits for user confirmation.
+   * Does NOT publish to worker queue yet - waits for user confirmation.
    */
   public static async uploadCsv(req: Request, res: Response): Promise<void> {
     try {
@@ -39,7 +39,7 @@ export class ImportController {
       // Create PENDING database record
       const run = await LeadService.createImportRun(req.file.originalname, rawRows.length);
 
-      // Store the valid rows temporarily — waiting for user to confirm with (possibly pruned) rows
+      // Store the valid rows temporarily - waiting for user to confirm with (possibly pruned) rows
       pendingRowsStore.set(run.id, valid);
 
       // Return 202 Accepted with preview statistics (no queue publish yet)
@@ -81,7 +81,7 @@ export class ImportController {
       pendingRowsStore.delete(runId);
 
       if (rowsToProcess.length === 0) {
-        // User pruned everything — mark as completed with 0 records
+        // User pruned everything - mark as completed with 0 records
         await LeadService.updateImportRunStatus(runId, 'COMPLETED');
         res.status(200).json({ success: true, message: 'Import confirmed with 0 records. Nothing to process.' });
         return;
