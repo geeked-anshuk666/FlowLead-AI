@@ -7,12 +7,13 @@ services:
     buildCommand: npm install && npm run build
     startCommand: npm run start
     envVars:
-      - key: NEXT_PUBLIC_API_BASE
+      - key: BACKEND_HOST
         fromService:
           name: groweasy-backend
           type: web
           property: host
-        value: ${fromService}/api
+      - key: NEXT_PUBLIC_API_BASE
+        value: ${BACKEND_HOST}/api
 
   # Express Backend Web Service
   - type: web
