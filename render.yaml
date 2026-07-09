@@ -1,0 +1,70 @@
+services:
+  # Next.js Frontend
+  - type: web
+    name: groweasy-frontend
+    runtime: node
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NEXT_PUBLIC_API_BASE
+        fromService:
+          name: groweasy-backend
+          type: web
+          property: host
+        value: ${fromService}/api
+
+  # Express Backend Web Service
+  - type: web
+    name: groweasy-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: PORT
+        value: 5000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: groweasy-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: groweasy-redis
+          type: redis
+          property: connectionString
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+
+  # Background Worker
+  - type: worker
+    name: groweasy-worker
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: node dist/worker/worker.js
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: groweasy-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: groweasy-redis
+          type: redis
+          property: connectionString
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+
+  # Redis instance
+  - type: redis
+    name: groweasy-redis
+    ipAllowList: [] # Private access only
+
+databases:
+  - name: groweasy-db
+    plan: free
