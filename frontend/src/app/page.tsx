@@ -17,7 +17,8 @@ import {
   Settings,
   HelpCircle,
   Check,
-  X
+  X,
+  AlertTriangle
 } from 'lucide-react';
 
 interface ImportRun {
@@ -35,6 +36,14 @@ export default function Home() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importStep, setImportStep] = useState<1 | 2 | 3>(1);
   const [isModalAnimating, setIsModalAnimating] = useState(false);
+
+  // Shared confirmation dialog for both delete contexts
+  const [confirmDialog, setConfirmDialog] = useState<{
+    type: 'lead' | 'previewRow';
+    leadId?: string;
+    leadName?: string;
+    rowIdx?: number;
+  } | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   
@@ -293,7 +302,7 @@ export default function Home() {
     });
   };
 
-  // Delete a lead record directly from the database table (Screenshot 3 request)
+  // Delete a lead record directly from the database table
   const handleDeleteLead = async (leadId: string) => {
     try {
       const res = await fetch(`${API_BASE}/leads/${leadId}`, {
@@ -308,6 +317,17 @@ export default function Home() {
     } catch (err) {
       console.error('Failed to delete lead from database:', err);
     }
+  };
+
+  // Confirm handler — runs the right deletion based on dialog type
+  const handleConfirmDelete = async () => {
+    if (!confirmDialog) return;
+    if (confirmDialog.type === 'lead' && confirmDialog.leadId) {
+      await handleDeleteLead(confirmDialog.leadId);
+    } else if (confirmDialog.type === 'previewRow' && confirmDialog.rowIdx !== undefined) {
+      handleRemoveRecord(confirmDialog.rowIdx);
+    }
+    setConfirmDialog(null);
   };
 
   const resetState = () => {
@@ -484,10 +504,14 @@ export default function Home() {
                     <tbody>
                       {filteredLeads.map((lead, idx) => (
                         <tr key={lead.id ?? idx} className="border-b border-neutral-900/20 hover:bg-neutral-900/10 text-neutral-300 transition-colors group">
-                          {/* Red X — sticky left, always visible */}
+                          {/* Red X — sticky left, opens confirmation dialog */}
                           <td className="p-3 sticky left-0 z-10 bg-neutral-950 group-hover:bg-neutral-900/80 backdrop-blur-sm transition-colors">
                             <button
-                              onClick={() => handleDeleteLead(lead.id)}
+                              onClick={() => setConfirmDialog({
+                                type: 'lead',
+                                leadId: lead.id,
+                                leadName: lead.name || lead.email || 'this lead'
+                              })}
                               className="w-7 h-7 flex items-center justify-center bg-red-950/20 hover:bg-red-500 border border-red-900/30 hover:border-red-400 rounded-lg text-red-400 hover:text-white transition-all duration-150 active:scale-[0.88] shadow-sm"
                               title="Delete Lead Record"
                             >
@@ -756,12 +780,15 @@ export default function Home() {
                             {Object.values(row).map((val: any, valIdx) => (
                               <td key={valIdx} className="p-4 whitespace-nowrap text-neutral-400">{String(val || '')}</td>
                             ))}
-                            {/* Red X Button to manually delete lead record prior to import (Screenshot 3 style) */}
+                            {/* Red X — opens confirmation before removing from preview */}
                             <td className="p-4 text-right whitespace-nowrap">
                               <button
-                                onClick={() => handleRemoveRecord(rowIdx)}
+                                onClick={() => setConfirmDialog({
+                                  type: 'previewRow',
+                                  rowIdx: rowIdx
+                                })}
                                 className="p-1.5 bg-red-950/15 hover:bg-red-950/40 border border-red-900/20 hover:border-red-900/40 rounded-lg text-red-400 transition-all active:scale-[0.92]"
-                                title="Remove Lead Record"
+                                title="Remove from import"
                               >
                                 <X className="w-3.5 h-3.5 stroke-[2.5]" />
                               </button>
@@ -874,6 +901,70 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* ── Confirmation Dialog ─────────────────────────────────────────── */}
+      {confirmDialog && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(9, 9, 11, 0.75)', backdropFilter: 'blur(6px)' }}
+        >
+          <div
+            className="bg-neutral-900 border border-neutral-800/60 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+            style={{ animation: 'scaleIn 0.18s cubic-bezier(0.34,1.56,0.64,1) both' }}
+          >
+            {/* Danger header strip */}
+            <div className="h-1 w-full bg-gradient-to-r from-red-600 to-rose-500" />
+
+            <div className="p-7 space-y-5">
+              {/* Icon + title row */}
+              <div className="flex items-start gap-4">
+                <div className="w-10 h-10 rounded-xl bg-red-950/40 border border-red-900/40 flex items-center justify-center shrink-0 mt-0.5">
+                  <AlertTriangle className="w-5 h-5 text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-neutral-100 tracking-tight">
+                    {confirmDialog.type === 'lead' ? 'Delete Lead Record' : 'Remove from Import'}
+                  </h3>
+                  <p className="text-xs text-neutral-400 mt-2 leading-relaxed">
+                    {confirmDialog.type === 'lead'
+                      ? `This action is permanent and cannot be undone — once deleted, ${
+                          confirmDialog.leadName ? `"${confirmDialog.leadName}"` : 'this lead'
+                        } will be removed from the database and all associated data will be lost forever.`
+                      : 'This record will be excluded from the upcoming import. You can always re-upload the CSV file if you change your mind, but this action cannot be undone within the current session.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="h-px bg-neutral-800/60" />
+
+              {/* Action buttons */}
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setConfirmDialog(null)}
+                  className="px-5 py-2.5 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700/60 text-xs font-bold rounded-xl text-neutral-300 hover:text-neutral-100 transition-all duration-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmDelete}
+                  className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-red-900/30 transition-all duration-200 active:scale-[0.97]"
+                >
+                  {confirmDialog.type === 'lead' ? 'Yes, Delete Permanently' : 'Yes, Remove Record'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <style>{`
+            @keyframes scaleIn {
+              from { opacity: 0; transform: scale(0.92); }
+              to   { opacity: 1; transform: scale(1); }
+            }
+          `}</style>
+        </div>
+      )}
     </div>
+
   );
 }
