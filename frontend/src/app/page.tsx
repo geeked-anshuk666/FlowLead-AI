@@ -11,14 +11,12 @@ import {
   AlertCircle,
   Database,
   Search,
-  Filter,
   Users,
-  Briefcase,
   Layers,
+  Briefcase,
   Settings,
   HelpCircle,
   Check,
-  ChevronRight,
   X
 } from 'lucide-react';
 
@@ -101,7 +99,6 @@ export default function Home() {
       const res = await fetch(`${API_BASE}/imports/history`);
       if (res.ok) {
         const runs = await res.json();
-        // Compile all leads from all past completed runs
         let allLeads: any[] = [];
         for (const run of runs) {
           if (run.status === 'COMPLETED') {
@@ -114,7 +111,6 @@ export default function Home() {
             }
           }
         }
-        // Sort leads by creation date descending
         allLeads.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setDbLeads(allLeads);
       }
@@ -195,7 +191,6 @@ export default function Home() {
     setError(null);
     setStatusMessage('Publishing tasks to worker queue...');
 
-    // Initialize Server-Sent Events listener
     const sse = new EventSource(`${API_BASE}/imports/${uploadData.runId}/progress`);
     sseRef.current = sse;
 
@@ -240,6 +235,20 @@ export default function Home() {
     }
   };
 
+  // Remove a specific record row from the upload data state prior to import
+  const handleRemoveRecord = (rowIdxToRemove: number) => {
+    if (!uploadData) return;
+    const updatedRows = [...uploadData.previewRows];
+    updatedRows.splice(rowIdxToRemove, 1);
+    
+    setUploadData({
+      ...uploadData,
+      totalRecords: uploadData.totalRecords - 1,
+      validCount: uploadData.validCount - 1,
+      previewRows: updatedRows
+    });
+  };
+
   const resetState = () => {
     setFile(null);
     setUploadData(null);
@@ -255,7 +264,6 @@ export default function Home() {
     resetState();
   };
 
-  // Filter leads by search query
   const filteredLeads = dbLeads.filter(lead => {
     const query = searchQuery.toLowerCase();
     return (
@@ -268,7 +276,6 @@ export default function Home() {
 
   return (
     <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100 flex font-sans selection:bg-teal-500 selection:text-white relative overflow-hidden">
-      {/* Dynamic Google Fonts Import */}
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
         body {
@@ -276,9 +283,12 @@ export default function Home() {
         }
       `}</style>
 
-      {/* Persistent Sidebar Navigation */}
+      {/* Decorative Lights */}
+      <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-teal-500/5 rounded-full blur-[120px] pointer-events-none -translate-y-1/2"></div>
+      <div className="absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-emerald-500/5 rounded-full blur-[150px] pointer-events-none translate-y-1/2"></div>
+
+      {/* Navigation Sidebar */}
       <aside className="w-64 border-r border-neutral-900/60 bg-neutral-950/70 backdrop-blur-xl flex flex-col z-20 shrink-0">
-        {/* Workspace Switcher */}
         <div className="p-6 border-b border-neutral-900/60">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-teal-500 to-emerald-500 flex items-center justify-center shadow-lg shadow-teal-500/10">
@@ -294,7 +304,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Sidebar Menu Groups */}
         <nav className="flex-1 px-4 py-6 space-y-6 overflow-y-auto">
           <div className="space-y-1">
             <span className="px-3 text-[10px] uppercase tracking-wider font-bold text-neutral-600 block mb-2">Main Functions</span>
@@ -326,17 +335,14 @@ export default function Home() {
 
           <div className="space-y-1">
             <span className="px-3 text-[10px] uppercase tracking-wider font-bold text-neutral-600 block mb-2">Control Center</span>
-            
             <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-neutral-500 cursor-not-allowed">
               <Briefcase className="w-4 h-4" />
               Team Members
             </div>
-            
             <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-neutral-500 cursor-not-allowed">
               <Settings className="w-4 h-4" />
               Portal Settings
             </div>
-
             <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-neutral-500 cursor-not-allowed">
               <HelpCircle className="w-4 h-4" />
               Help Center
@@ -344,7 +350,6 @@ export default function Home() {
           </div>
         </nav>
 
-        {/* User Card */}
         <div className="p-4 border-t border-neutral-900/60 bg-neutral-950/40 flex items-center gap-3">
           <div className="w-8 h-8 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center text-xs font-bold text-neutral-300">
             A
@@ -356,33 +361,25 @@ export default function Home() {
         </div>
       </aside>
 
-      {/* Main Canvas Area */}
+      {/* Main Canvas */}
       <div className="flex-1 flex flex-col min-w-0 relative">
-        {/* Background gradient lights */}
-        <div className="absolute top-0 right-1/4 w-[500px] h-[500px] bg-teal-500/5 rounded-full blur-[120px] pointer-events-none -translate-y-1/2"></div>
-
-        {/* View Switcher Routing */}
         {activeView === 'manage' ? (
-          /* Manage Leads Interface */
           <div className="flex-1 flex flex-col min-h-0">
-            {/* Page Header */}
             <div className="p-8 border-b border-neutral-900/50 bg-neutral-950/20 flex flex-col md:flex-row md:items-center justify-between gap-6">
               <div>
                 <h2 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-neutral-50 to-neutral-300 bg-clip-text text-transparent">Manage Your Leads</h2>
                 <p className="text-xs text-neutral-500 mt-1 font-medium">Monitor lead status, verify dynamic properties, and check ingestion streams.</p>
               </div>
-
               <div>
                 <button 
                   onClick={() => setShowImportModal(true)}
-                  className="px-5 py-3 bg-neutral-100 hover:bg-neutral-200 text-neutral-950 text-xs font-bold rounded-xl shadow-lg shadow-white/5 transition-all duration-300 active:scale-[0.98]"
+                  className="px-5 py-3 bg-neutral-100 hover:bg-neutral-200 text-neutral-950 text-xs font-bold rounded-xl shadow-lg transition-all duration-300 active:scale-[0.98]"
                 >
                   Import Leads via CSV
                 </button>
               </div>
             </div>
 
-            {/* Table Filters Action Bar */}
             <div className="px-8 py-5 border-b border-neutral-900/40 bg-neutral-950/10 flex flex-col sm:flex-row justify-between items-center gap-4">
               <div className="relative w-full sm:max-w-xs">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
@@ -399,16 +396,14 @@ export default function Home() {
                 <button 
                   onClick={fetchLeads}
                   className="p-2.5 bg-neutral-900/50 border border-neutral-800/80 rounded-xl text-neutral-400 hover:text-neutral-200 transition-all active:scale-[0.96]"
-                  title="Refresh Leads Database"
                 >
                   <RefreshCw className="w-4 h-4" />
                 </button>
               </div>
             </div>
 
-            {/* Active Database Leads Table */}
             <div className="flex-1 overflow-auto px-8 py-6">
-              <div className="bg-neutral-900/25 border border-neutral-900 rounded-2xl overflow-hidden shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)]">
+              <div className="bg-neutral-900/25 border border-neutral-900 rounded-2xl overflow-hidden">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="bg-neutral-950/40 text-neutral-400 font-bold border-b border-neutral-900">
@@ -461,14 +456,13 @@ export default function Home() {
             </div>
           </div>
         ) : (
-          /* Lead Source Logs view */
           <div className="flex-grow p-8 space-y-6">
             <div>
               <h2 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-neutral-50 to-neutral-300 bg-clip-text text-transparent">Lead Source History Logs</h2>
               <p className="text-xs text-neutral-500 mt-1 font-medium">Verify system processing statistics and worker execution history records.</p>
             </div>
 
-            <div className="bg-neutral-900/25 border border-neutral-900 rounded-2xl overflow-hidden shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)]">
+            <div className="bg-neutral-900/25 border border-neutral-900 rounded-2xl overflow-hidden">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-neutral-950/60 text-neutral-400 font-bold border-b border-neutral-900">
@@ -537,13 +531,23 @@ export default function Home() {
       {/* Stepped Import Wizard Modal */}
       {showImportModal && (
         <div className="fixed inset-0 bg-neutral-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-neutral-900 border border-neutral-850/80 rounded-3xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col relative animate-in fade-in zoom-in-95 duration-200">
+          {/* Modal Container: min(1200px, 90vw) wide, 85vh high, rounded-20px */}
+          <div className="bg-neutral-900 border border-neutral-850/80 rounded-[20px] w-full max-w-[1200px] h-[85vh] overflow-hidden shadow-2xl flex flex-col relative animate-in fade-in zoom-in-95 duration-200">
             
             {/* Modal Header */}
-            <div className="p-6 border-b border-neutral-850/60 bg-neutral-900/40 flex justify-between items-center">
-              <div>
-                <h3 className="text-md font-bold text-neutral-200">Import Leads via CSV</h3>
-                <p className="text-[10px] text-neutral-500 mt-1 font-semibold uppercase tracking-wider">Stepped Ingestion Pipeline</p>
+            <div className="px-8 py-5 border-b border-neutral-850/60 bg-neutral-900/40 flex justify-between items-center h-[80px] shrink-0">
+              <div className="flex items-center gap-6">
+                <h3 className="text-xl font-bold text-neutral-200">Import Leads</h3>
+                {/* Inline Metadata Summary instead of heavy boxes */}
+                {uploadData && importStep === 2 && (
+                  <div className="flex items-center gap-3 text-xs text-neutral-400 border-l border-neutral-800 pl-6 h-5">
+                    <span className="font-semibold text-neutral-300">{uploadData.fileName}</span>
+                    <span className="text-neutral-600">|</span>
+                    <span className="text-teal-400 font-medium">Valid ({uploadData.validCount})</span>
+                    <span className="text-neutral-600">|</span>
+                    <span className="text-neutral-500 font-medium">Skipped ({uploadData.skippedCount})</span>
+                  </div>
+                )}
               </div>
               <button 
                 onClick={closeImportModal}
@@ -553,28 +557,28 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Stepper Progress Bar */}
-            <div className="px-8 py-4 border-b border-neutral-850/40 bg-neutral-900/20 grid grid-cols-3 gap-4">
-              <div className="flex items-center gap-3">
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
+            {/* Stepper Progress Indicator */}
+            <div className="px-8 py-3 border-b border-neutral-850/40 bg-neutral-900/20 flex gap-8 items-center h-[50px] shrink-0">
+              <div className="flex items-center gap-2">
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
                   importStep >= 1 ? 'bg-teal-500 text-neutral-950' : 'bg-neutral-800 text-neutral-500'
                 }`}>
-                  {importStep > 1 ? <Check className="w-3.5 h-3.5 text-neutral-950 stroke-[3]" /> : '1'}
+                  {importStep > 1 ? <Check className="w-3 h-3 text-neutral-950 stroke-[3]" /> : '1'}
                 </div>
-                <span className="text-[10px] uppercase tracking-wider font-bold text-neutral-400">Upload CSV</span>
+                <span className="text-[10px] uppercase tracking-wider font-bold text-neutral-400">Upload</span>
               </div>
 
-              <div className="flex items-center gap-3">
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
+              <div className="flex items-center gap-2">
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
                   importStep >= 2 ? 'bg-teal-500 text-neutral-950' : 'bg-neutral-800 text-neutral-500'
                 }`}>
-                  {importStep > 2 ? <Check className="w-3.5 h-3.5 text-neutral-950 stroke-[3]" /> : '2'}
+                  {importStep > 2 ? <Check className="w-3 h-3 text-neutral-950 stroke-[3]" /> : '2'}
                 </div>
-                <span className="text-[10px] uppercase tracking-wider font-bold text-neutral-400">Map & Preview</span>
+                <span className="text-[10px] uppercase tracking-wider font-bold text-neutral-400">Preview</span>
               </div>
 
-              <div className="flex items-center gap-3">
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
+              <div className="flex items-center gap-2">
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
                   importStep >= 3 ? 'bg-teal-500 text-neutral-950' : 'bg-neutral-800 text-neutral-500'
                 }`}>
                   3
@@ -583,19 +587,19 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Modal Body / Active Step Screen */}
-            <div className="p-8 overflow-y-auto max-h-[60vh] flex-grow">
+            {/* Modal Body: Dominates the layout space */}
+            <div className="flex-1 overflow-hidden relative bg-neutral-950/20">
               
-              {/* Step 1: Dropzone Upload Screen */}
+              {/* Step 1: Upload Dropzone */}
               {importStep === 1 && (
-                <div className="space-y-6">
+                <div className="p-8 h-full flex flex-col justify-center space-y-6">
                   <div 
                     onDragEnter={handleDrag}
                     onDragOver={handleDrag}
                     onDragLeave={handleDrag}
                     onDrop={handleDrop}
                     onClick={() => fileInputRef.current?.click()}
-                    className={`border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all duration-300 relative overflow-hidden group ${
+                    className={`border-2 border-dashed rounded-2xl p-16 text-center cursor-pointer transition-all duration-300 relative overflow-hidden group max-w-xl mx-auto w-full ${
                       dragActive 
                         ? 'border-teal-500 bg-teal-950/10 shadow-lg shadow-teal-500/5' 
                         : 'border-neutral-800 hover:border-neutral-700 bg-neutral-900/10'
@@ -615,92 +619,85 @@ export default function Home() {
                     </div>
                     <h4 className="text-sm font-bold text-neutral-200">Drop your CSV file here</h4>
                     <p className="text-[10px] text-neutral-500 mt-1 max-w-xs mx-auto leading-relaxed">
-                      Or click to browse local files (max size 5MB).
+                      Or click to browse local directories (max size 5MB).
                     </p>
                   </div>
 
-                  <div className="bg-neutral-950/40 p-5 rounded-xl border border-neutral-850/40">
-                    <h5 className="text-[10px] uppercase tracking-wider font-bold text-neutral-400 mb-2">Required Headers Info</h5>
+                  <div className="bg-neutral-950/40 p-5 rounded-xl border border-neutral-850/40 max-w-xl mx-auto w-full">
+                    <h5 className="text-[10px] uppercase tracking-wider font-bold text-neutral-400 mb-2">Required Headers</h5>
                     <p className="text-[10px] text-neutral-500 leading-relaxed">
-                      Make sure your file columns map correctly: <code className="text-teal-400 bg-teal-950/30 px-1 py-0.5 rounded">created_at</code>, <code className="text-teal-400 bg-teal-950/30 px-1 py-0.5 rounded">name</code>, <code className="text-teal-400 bg-teal-950/30 px-1 py-0.5 rounded">email</code>, <code className="text-teal-400 bg-teal-950/30 px-1 py-0.5 rounded">country_code</code>, <code className="text-teal-400 bg-teal-950/30 px-1 py-0.5 rounded">mobile_without_country_code</code>.
+                      Headers must match exactly: <code className="text-teal-400 bg-teal-950/30 px-1 py-0.5 rounded">created_at</code>, <code className="text-teal-400 bg-teal-950/30 px-1 py-0.5 rounded">name</code>, <code className="text-teal-400 bg-teal-950/30 px-1 py-0.5 rounded">email</code>, <code className="text-teal-400 bg-teal-950/30 px-1 py-0.5 rounded">country_code</code>, <code className="text-teal-400 bg-teal-950/30 px-1 py-0.5 rounded">mobile_without_country_code</code>.
                     </p>
                   </div>
                 </div>
               )}
 
-              {/* Step 2: Mapping / Preview Screen */}
+              {/* Step 2: Zebra Table Preview with Individual row delete & Sticky Header */}
               {importStep === 2 && uploadData && (
-                <div className="space-y-6">
-                  {/* File Metadata Overview Cards */}
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="bg-neutral-950/30 border border-neutral-850/30 p-4 rounded-2xl flex flex-col">
-                      <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">File Selection</span>
-                      <span className="text-xs font-bold text-neutral-200 truncate mt-1">{uploadData.fileName}</span>
-                    </div>
-
-                    <div className="bg-neutral-950/30 border border-neutral-850/30 p-4 rounded-2xl flex flex-col">
-                      <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">Valid Leads</span>
-                      <span className="text-xs font-bold text-teal-400 mt-1">{uploadData.validCount} rows</span>
-                    </div>
-
-                    <div className="bg-neutral-950/30 border border-neutral-850/30 p-4 rounded-2xl flex flex-col">
-                      <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">Skipped Empty</span>
-                      <span className="text-xs font-bold text-neutral-500 mt-1">{uploadData.skippedCount} rows</span>
-                    </div>
+                <div className="h-full flex flex-col p-8 space-y-4">
+                  {/* Clean Search Input */}
+                  <div className="relative w-full max-w-xs shrink-0">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500" />
+                    <input 
+                      type="text"
+                      placeholder="Search preview rows..."
+                      onChange={(e) => {
+                        const query = e.target.value.toLowerCase();
+                        // Local quick filter visual support
+                        const tableRows = document.querySelectorAll('.preview-row');
+                        tableRows.forEach((row: any) => {
+                          const text = row.innerText.toLowerCase();
+                          row.style.display = text.includes(query) ? '' : 'none';
+                        });
+                      }}
+                      className="w-full pl-9 pr-4 py-2 bg-neutral-900/50 hover:bg-neutral-900/70 border border-neutral-800/80 focus:border-neutral-700 rounded-xl text-xs text-neutral-200 focus:outline-none transition-all"
+                    />
                   </div>
 
-                  {/* Top 5 Rows Preview Table */}
-                  {uploadData.previewRows.length > 0 && (
-                    <div className="border border-neutral-850/80 rounded-2xl overflow-hidden bg-neutral-950/20">
-                      <div className="p-3 bg-neutral-950/40 border-b border-neutral-850/60">
-                        <span className="text-[10px] font-bold text-neutral-400 tracking-wider uppercase">Lead Records Preview</span>
-                      </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-[11px] border-collapse">
-                          <thead>
-                            <tr className="bg-neutral-950/50 text-neutral-400 font-semibold border-b border-neutral-850/60">
-                              {Object.keys(uploadData.previewRows[0] || {}).map((header, idx) => (
-                                <th key={idx} className="p-3 whitespace-nowrap">{header}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {uploadData.previewRows.slice(0, 5).map((row, rowIdx) => (
-                              <tr key={rowIdx} className="border-b border-neutral-850/30 text-neutral-400">
-                                {Object.values(row).map((val: any, valIdx) => (
-                                  <td key={valIdx} className="p-3 whitespace-nowrap">{String(val || '')}</td>
-                                ))}
-                              </tr>
+                  {/* Redesigned Clean Preview Table (Rounded 14px, Zebra rows, Horizontal Separators, Sticky Header) */}
+                  <div className="flex-1 overflow-auto border border-neutral-850/80 rounded-[14px] bg-neutral-900/20">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-neutral-950 text-neutral-400 font-medium border-b border-neutral-850/80 sticky top-0 z-10">
+                          {Object.keys(uploadData.previewRows[0] || {}).map((header, idx) => (
+                            <th key={idx} className="p-4 bg-neutral-950">{header}</th>
+                          ))}
+                          <th className="p-4 bg-neutral-950 text-right w-12">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {uploadData.previewRows.map((row, rowIdx) => (
+                          <tr 
+                            key={rowIdx} 
+                            className={`preview-row border-b border-neutral-850/30 text-neutral-300 transition-colors ${
+                              rowIdx % 2 === 0 ? 'bg-neutral-900' : 'bg-neutral-950/40'
+                            }`}
+                          >
+                            {Object.values(row).map((val: any, valIdx) => (
+                              <td key={valIdx} className="p-4 whitespace-nowrap text-neutral-400">{String(val || '')}</td>
                             ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Actions buttons */}
-                  <div className="flex justify-between items-center pt-2">
-                    <button 
-                      onClick={resetState}
-                      className="px-4 py-2 border border-neutral-800 hover:border-neutral-700 text-xs font-semibold rounded-xl text-neutral-400 hover:text-neutral-200 transition-all"
-                    >
-                      Choose Different File
-                    </button>
-                    <button 
-                      onClick={startImportPipeline}
-                      className="px-5 py-2.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-950 text-xs font-bold rounded-xl shadow-lg transition-all"
-                    >
-                      Confirm and Start Import
-                    </button>
+                            <td className="p-4 text-right whitespace-nowrap">
+                              <button
+                                onClick={() => handleRemoveRecord(rowIdx)}
+                                className="p-1 hover:bg-neutral-800 rounded text-neutral-500 hover:text-red-400 transition-all"
+                                title="Remove Record Row"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}
 
               {/* Step 3: SSE Processing & Final Summary Statistics */}
               {importStep === 3 && (
-                <div className="space-y-8">
+                <div className="p-8 h-full flex flex-col justify-center">
                   {isProcessing ? (
-                    <div className="max-w-md mx-auto text-center space-y-6 py-6">
+                    <div className="max-w-xl mx-auto w-full text-center space-y-8">
                       <div className="relative w-14 h-14 mx-auto flex items-center justify-center">
                         <div className="absolute inset-0 border-4 border-neutral-800 rounded-full"></div>
                         <div className="absolute inset-0 border-4 border-teal-500 rounded-full animate-spin border-t-transparent"></div>
@@ -711,15 +708,16 @@ export default function Home() {
                         <h4 className="text-sm font-bold text-neutral-200">{statusMessage}</h4>
                         {stats && (
                           <p className="text-[11px] text-neutral-400">
-                            Processed: <span className="text-neutral-200 font-semibold">{stats.processed}</span> | Skipped: <span className="text-neutral-500 font-semibold">{stats.skipped}</span>
+                            Mapped leads: <span className="text-neutral-200 font-semibold">{stats.processed}</span> / Total: <span className="text-neutral-400 font-semibold">{uploadData?.validCount}</span>
                           </p>
                         )}
                       </div>
 
-                      <div className="space-y-1">
-                        <div className="w-full bg-neutral-950 rounded-full h-1.5 overflow-hidden border border-neutral-850">
+                      {/* Wide Thicker Ingestion Progress Bar (Height 8px) */}
+                      <div className="space-y-2 max-w-md mx-auto">
+                        <div className="w-full bg-neutral-950 rounded-full h-2 overflow-hidden border border-neutral-850">
                           <div 
-                            className="bg-gradient-to-r from-teal-500 to-emerald-500 h-full transition-all duration-500"
+                            className="bg-gradient-to-r from-teal-500 to-emerald-500 h-full transition-all duration-500 rounded-full"
                             style={{ width: `${progress}%` }}
                           ></div>
                         </div>
@@ -733,7 +731,7 @@ export default function Home() {
                   ) : (
                     /* Final Success Summary Report card */
                     importResult && (
-                      <div className="space-y-6">
+                      <div className="max-w-xl mx-auto w-full space-y-6">
                         <div className="bg-emerald-950/20 border border-emerald-900/30 p-5 rounded-2xl flex items-center gap-4">
                           <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0" />
                           <div>
@@ -755,15 +753,6 @@ export default function Home() {
                             <span className="text-lg font-bold text-neutral-500 mt-1 block">{importResult.skippedRecords}</span>
                           </div>
                         </div>
-
-                        <div className="flex justify-end pt-2">
-                          <button 
-                            onClick={closeImportModal}
-                            className="px-5 py-2.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-950 text-xs font-bold rounded-xl transition-all"
-                          >
-                            Finish and View Dashboard
-                          </button>
-                        </div>
                       </div>
                     )
                   )}
@@ -771,6 +760,43 @@ export default function Home() {
               )}
 
             </div>
+
+            {/* Modal Footer: Rounded 12px buttons */}
+            <div className="px-8 py-5 border-t border-neutral-850/60 bg-neutral-900/40 flex justify-between items-center h-[80px] shrink-0">
+              <div>
+                {uploadData && importStep === 2 && (
+                  <span className="text-xs text-neutral-500 tracking-wide font-medium">
+                    {uploadData.fileName} • {uploadData.validCount} records ready
+                  </span>
+                )}
+              </div>
+              
+              <div className="flex gap-3">
+                <button 
+                  onClick={closeImportModal}
+                  className="px-5 py-2.5 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs font-bold rounded-xl text-neutral-400 hover:text-neutral-200 transition-all duration-300"
+                >
+                  Cancel
+                </button>
+                {importStep === 2 && uploadData && (
+                  <button 
+                    onClick={startImportPipeline}
+                    className="px-5 py-2.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-950 text-xs font-bold rounded-xl shadow-lg transition-all duration-300"
+                  >
+                    Import {uploadData.validCount} Leads
+                  </button>
+                )}
+                {importStep === 3 && !isProcessing && (
+                  <button 
+                    onClick={closeImportModal}
+                    className="px-5 py-2.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-950 text-xs font-bold rounded-xl shadow-lg transition-all duration-300"
+                  >
+                    Finish
+                  </button>
+                )}
+              </div>
+            </div>
+
           </div>
         </div>
       )}
