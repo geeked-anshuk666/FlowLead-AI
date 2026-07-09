@@ -466,23 +466,34 @@ export default function Home() {
 
             <div className="flex-1 overflow-auto px-8 py-6">
               <div className="bg-neutral-900/10 border border-neutral-900/40 rounded-2xl overflow-hidden">
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto overflow-y-visible">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="bg-neutral-950/40 text-neutral-400 font-bold border-b border-neutral-900/40">
+                        {/* Sticky X column — always visible on left */}
+                        <th className="p-3 w-10 sticky left-0 z-20 bg-neutral-950/90 backdrop-blur-sm"></th>
                         <th className="p-4 font-semibold">Lead Name</th>
                         <th className="p-4 font-semibold">Email</th>
                         <th className="p-4 font-semibold">Contact</th>
                         <th className="p-4 font-semibold">Date Created</th>
                         <th className="p-4 font-semibold">Company</th>
                         <th className="p-4 font-semibold">Status</th>
-                        <th className="p-4 font-semibold">Notes</th>
-                        <th className="p-4 font-semibold text-right">Actions</th>
+                        <th className="p-4 font-semibold max-w-[160px]">Notes</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredLeads.map((lead, idx) => (
-                        <tr key={idx} className="border-b border-neutral-900/20 hover:bg-neutral-900/10 text-neutral-300 transition-colors">
+                        <tr key={lead.id ?? idx} className="border-b border-neutral-900/20 hover:bg-neutral-900/10 text-neutral-300 transition-colors group">
+                          {/* Red X — sticky left, always visible */}
+                          <td className="p-3 sticky left-0 z-10 bg-neutral-950 group-hover:bg-neutral-900/80 backdrop-blur-sm transition-colors">
+                            <button
+                              onClick={() => handleDeleteLead(lead.id)}
+                              className="w-7 h-7 flex items-center justify-center bg-red-950/20 hover:bg-red-500 border border-red-900/30 hover:border-red-400 rounded-lg text-red-400 hover:text-white transition-all duration-150 active:scale-[0.88] shadow-sm"
+                              title="Delete Lead Record"
+                            >
+                              <X className="w-3.5 h-3.5 stroke-[2.5]" />
+                            </button>
+                          </td>
                           <td className="p-4 font-bold whitespace-nowrap text-neutral-200">{lead.name || '-'}</td>
                           <td className="p-4 whitespace-nowrap text-neutral-400">{lead.email || '-'}</td>
                           <td className="p-4 whitespace-nowrap text-neutral-400">
@@ -502,25 +513,15 @@ export default function Home() {
                               {lead.crmStatus}
                             </span>
                           </td>
-                          <td className="p-4 text-neutral-400 max-w-xs truncate" title={lead.crmNote || ''}>
+                          <td className="p-4 text-neutral-400 max-w-[160px] truncate" title={lead.crmNote || ''}>
                             {lead.crmNote || '-'}
-                          </td>
-                          {/* Red X Button to manually delete database lead record */}
-                          <td className="p-4 text-right whitespace-nowrap">
-                            <button
-                              onClick={() => handleDeleteLead(lead.id)}
-                              className="p-1.5 bg-red-950/15 hover:bg-red-950/40 border border-red-900/20 hover:border-red-900/40 rounded-lg text-red-400 transition-all active:scale-[0.92]"
-                              title="Delete Lead Record"
-                            >
-                              <X className="w-3.5 h-3.5 stroke-[2.5]" />
-                            </button>
                           </td>
                         </tr>
                       ))}
                       {filteredLeads.length === 0 && (
                         <tr>
                           <td colSpan={8} className="p-12 text-center text-neutral-500">
-                            No leads matching search query. Import contacts to fill rows database.
+                            No leads matching search query. Import contacts to fill the database.
                           </td>
                         </tr>
                       )}
