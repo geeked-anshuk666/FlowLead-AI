@@ -13,6 +13,8 @@ async function startWorker() {
 
   console.log('Worker listening on channel "csv_imports"...');
 
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
   await QueueService.subscribe('csv_imports', async (message) => {
     try {
       const task = JSON.parse(message);
@@ -24,9 +26,12 @@ async function startWorker() {
       let processedCount = 0;
       let totalSkipped = 0;
 
-      // Process rows in batches of BATCH_SIZE to scale to 100K+ leads
-      for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-        const batch = rows.slice(i, i + BATCH_SIZE);
+      // Dynamically compute batch size for better UX on smaller files
+      const dynamicBatchSize = rows.length < 30 ? Math.max(1, Math.ceil(rows.length / 5)) : BATCH_SIZE;
+
+      // Process rows in dynamic batch sizes to scale to 100K+ leads
+      for (let i = 0; i < rows.length; i += dynamicBatchSize) {
+        const batch = rows.slice(i, i + dynamicBatchSize);
         
         try {
           // Send batch for AI mapping
@@ -73,6 +78,8 @@ async function startWorker() {
             })
           );
         }
+        // Small delay to make progress animations smooth and visible on client
+        await sleep(800);
       }
 
       // Mark the run as COMPLETED

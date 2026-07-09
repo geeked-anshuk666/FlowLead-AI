@@ -215,13 +215,13 @@ export default function Home() {
               <Database className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold tracking-tight bg-gradient-to-r from-neutral-50 to-neutral-300 bg-clip-text text-transparent">GrowEasy CRM</h1>
-              <p className="text-xs text-neutral-500 font-medium">AI CSV Lead Importer</p>
+              <h1 className="text-lg font-bold tracking-tight bg-gradient-to-r from-neutral-50 to-neutral-300 bg-clip-text text-transparent">LeadFlow AI</h1>
+              <p className="text-xs text-neutral-500 font-medium">Dynamic Lead Importer</p>
             </div>
           </div>
           <div className="flex gap-1 bg-neutral-900 p-1 rounded-xl">
             <button
-              onClick={() => setActiveTab('import')}
+              onClick={() => { setActiveTab('import'); resetState(); }}
               className={`px-4 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${
                 activeTab === 'import' 
                   ? 'bg-neutral-800 text-teal-400 shadow-sm' 
@@ -415,7 +415,7 @@ export default function Home() {
 
                 <div className="bg-neutral-900/20 border border-neutral-900 rounded-2xl overflow-hidden">
                   <div className="p-4 border-b border-neutral-900 bg-neutral-900/30 flex justify-between items-center">
-                    <h3 className="text-xs font-bold text-neutral-400 tracking-wider uppercase">Extracted GrowEasy leads ({importResult.leads.length})</h3>
+                    <h3 className="text-xs font-bold text-neutral-400 tracking-wider uppercase">Extracted LeadFlow leads ({importResult.leads.length})</h3>
                   </div>
                   <div className="overflow-x-auto max-h-96 overflow-y-auto">
                     <table className="w-full text-left text-xs border-collapse">
