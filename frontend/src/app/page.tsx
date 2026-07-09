@@ -421,65 +421,67 @@ export default function Home() {
 
             <div className="flex-1 overflow-auto px-8 py-6">
               <div className="bg-neutral-900/10 border border-neutral-900/40 rounded-2xl overflow-hidden">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-neutral-950/40 text-neutral-400 font-bold border-b border-neutral-900/40">
-                      <th className="p-4 font-semibold">Lead Name</th>
-                      <th className="p-4 font-semibold">Email</th>
-                      <th className="p-4 font-semibold">Contact</th>
-                      <th className="p-4 font-semibold">Date Created</th>
-                      <th className="p-4 font-semibold">Company</th>
-                      <th className="p-4 font-semibold">Status</th>
-                      <th className="p-4 font-semibold">Notes</th>
-                      <th className="p-4 font-semibold text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredLeads.map((lead, idx) => (
-                      <tr key={idx} className="border-b border-neutral-900/20 hover:bg-neutral-900/10 text-neutral-300 transition-colors">
-                        <td className="p-4 font-bold whitespace-nowrap text-neutral-200">{lead.name || '-'}</td>
-                        <td className="p-4 whitespace-nowrap text-neutral-400">{lead.email || '-'}</td>
-                        <td className="p-4 whitespace-nowrap text-neutral-400">
-                          {lead.countryCode ? `${lead.countryCode} ` : ''}{lead.mobileWithoutCountryCode || '-'}
-                        </td>
-                        <td className="p-4 whitespace-nowrap text-neutral-500">
-                          {new Date(lead.createdAt).toLocaleString()}
-                        </td>
-                        <td className="p-4 whitespace-nowrap text-neutral-400">{lead.company || '-'}</td>
-                        <td className="p-4 whitespace-nowrap">
-                          <span className={`px-2.5 py-1 rounded text-[10px] font-bold ${
-                            lead.crmStatus === 'SALE_DONE' ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-900/30' :
-                            lead.crmStatus === 'GOOD_LEAD_FOLLOW_UP' ? 'bg-teal-950/40 text-teal-400 border border-teal-900/30' :
-                            lead.crmStatus === 'DID_NOT_CONNECT' ? 'bg-amber-950/40 text-amber-400 border border-amber-900/30' :
-                            'bg-red-950/40 text-red-400 border border-red-900/30'
-                          }`}>
-                            {lead.crmStatus}
-                          </span>
-                        </td>
-                        <td className="p-4 text-neutral-400 max-w-xs truncate" title={lead.crmNote || ''}>
-                          {lead.crmNote || '-'}
-                        </td>
-                        {/* Red X Button to manually delete database lead record */}
-                        <td className="p-4 text-right whitespace-nowrap">
-                          <button
-                            onClick={() => handleDeleteLead(lead.id)}
-                            className="p-1.5 bg-red-950/15 hover:bg-red-950/40 border border-red-900/20 hover:border-red-900/40 rounded-lg text-red-400 transition-all active:scale-[0.92]"
-                            title="Delete Lead Record"
-                          >
-                            <X className="w-3.5 h-3.5 stroke-[2.5]" />
-                          </button>
-                        </td>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-neutral-950/40 text-neutral-400 font-bold border-b border-neutral-900/40">
+                        <th className="p-4 font-semibold">Lead Name</th>
+                        <th className="p-4 font-semibold">Email</th>
+                        <th className="p-4 font-semibold">Contact</th>
+                        <th className="p-4 font-semibold">Date Created</th>
+                        <th className="p-4 font-semibold">Company</th>
+                        <th className="p-4 font-semibold">Status</th>
+                        <th className="p-4 font-semibold">Notes</th>
+                        <th className="p-4 font-semibold text-right">Actions</th>
                       </tr>
-                    ))}
-                    {filteredLeads.length === 0 && (
-                      <tr>
-                        <td colSpan={8} className="p-12 text-center text-neutral-500">
-                          No leads matching search query. Import contacts to fill rows database.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {filteredLeads.map((lead, idx) => (
+                        <tr key={idx} className="border-b border-neutral-900/20 hover:bg-neutral-900/10 text-neutral-300 transition-colors">
+                          <td className="p-4 font-bold whitespace-nowrap text-neutral-200">{lead.name || '-'}</td>
+                          <td className="p-4 whitespace-nowrap text-neutral-400">{lead.email || '-'}</td>
+                          <td className="p-4 whitespace-nowrap text-neutral-400">
+                            {lead.countryCode ? `${lead.countryCode} ` : ''}{lead.mobileWithoutCountryCode || '-'}
+                          </td>
+                          <td className="p-4 whitespace-nowrap text-neutral-500">
+                            {new Date(lead.createdAt).toLocaleString()}
+                          </td>
+                          <td className="p-4 whitespace-nowrap text-neutral-400">{lead.company || '-'}</td>
+                          <td className="p-4 whitespace-nowrap">
+                            <span className={`px-2.5 py-1 rounded text-[10px] font-bold ${
+                              lead.crmStatus === 'SALE_DONE' ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-900/30' :
+                              lead.crmStatus === 'GOOD_LEAD_FOLLOW_UP' ? 'bg-teal-950/40 text-teal-400 border border-teal-900/30' :
+                              lead.crmStatus === 'DID_NOT_CONNECT' ? 'bg-amber-950/40 text-amber-400 border border-amber-900/30' :
+                              'bg-red-950/40 text-red-400 border border-red-900/30'
+                            }`}>
+                              {lead.crmStatus}
+                            </span>
+                          </td>
+                          <td className="p-4 text-neutral-400 max-w-xs truncate" title={lead.crmNote || ''}>
+                            {lead.crmNote || '-'}
+                          </td>
+                          {/* Red X Button to manually delete database lead record */}
+                          <td className="p-4 text-right whitespace-nowrap">
+                            <button
+                              onClick={() => handleDeleteLead(lead.id)}
+                              className="p-1.5 bg-red-950/15 hover:bg-red-950/40 border border-red-900/20 hover:border-red-900/40 rounded-lg text-red-400 transition-all active:scale-[0.92]"
+                              title="Delete Lead Record"
+                            >
+                              <X className="w-3.5 h-3.5 stroke-[2.5]" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {filteredLeads.length === 0 && (
+                        <tr>
+                          <td colSpan={8} className="p-12 text-center text-neutral-500">
+                            No leads matching search query. Import contacts to fill rows database.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
