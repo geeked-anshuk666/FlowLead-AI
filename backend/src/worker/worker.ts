@@ -1,8 +1,7 @@
-import { createClient } from 'redis';
-import { connectRedis } from '../config/redis.js';
 import { connectDb } from '../config/db.js';
 import { LeadService } from '../services/lead.service.js';
 import { AiService } from '../services/ai.service.js';
+import { QueueService } from '../services/queue.service.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -11,18 +10,10 @@ const BATCH_SIZE = 50;
 
 async function startWorker() {
   await connectDb();
-  await connectRedis();
 
-  const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-  const subscriber = createClient({ url: redisUrl });
-  const publisher = createClient({ url: redisUrl });
+  console.log('Worker listening on channel "csv_imports"...');
 
-  await subscriber.connect();
-  await publisher.connect();
-
-  console.log('Worker listening on Redis channel "csv_imports"...');
-
-  await subscriber.subscribe('csv_imports', async (message) => {
+  await QueueService.subscribe('csv_imports', async (message) => {
     try {
       const task = JSON.parse(message);
       const { runId, rows } = task;
@@ -56,7 +47,7 @@ async function startWorker() {
 
           // Publish real-time progress update to Redis Pub/Sub
           const progressPercent = Math.round(((i + batch.length) / rows.length) * 100);
-          await publisher.publish(
+          await QueueService.publish(
             `import_progress:${runId}`,
             JSON.stringify({
               status: 'PROCESSING',
@@ -72,7 +63,7 @@ async function startWorker() {
           await LeadService.incrementImportCounts(runId, 0, batch.length);
 
           const progressPercent = Math.round(((i + batch.length) / rows.length) * 100);
-          await publisher.publish(
+          await QueueService.publish(
             `import_progress:${runId}`,
             JSON.stringify({
               status: 'PROCESSING',
@@ -86,7 +77,7 @@ async function startWorker() {
 
       // Mark the run as COMPLETED
       await LeadService.updateImportRunStatus(runId, 'COMPLETED');
-      await publisher.publish(
+      await QueueService.publish(
         `import_progress:${runId}`,
         JSON.stringify({
           status: 'COMPLETED',

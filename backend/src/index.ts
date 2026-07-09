@@ -1,6 +1,7 @@
 import app from './app.js';
 import { connectDb } from './config/db.js';
 import { connectRedis } from './config/redis.js';
+import { QueueService } from './services/queue.service.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -10,7 +11,17 @@ const PORT = process.env.PORT || 5000;
 async function startServer() {
   // Establish configurations and services
   await connectDb();
-  await connectRedis();
+  
+  try {
+    if (process.env.REDIS_URL) {
+      await connectRedis();
+    }
+  } catch (err) {
+    console.warn('Redis client setup skipped/failed:', err);
+  }
+
+  // Initialize unified queue service
+  await QueueService.initialize();
 
   // Start background worker subscription logic in the same process
   await import('./worker/worker.js');

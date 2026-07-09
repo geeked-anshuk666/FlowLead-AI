@@ -1,8 +1,7 @@
 import { Request, Response } from 'express';
 import { CsvService } from '../services/csv.service.js';
 import { LeadService } from '../services/lead.service.js';
-import { redisClient } from '../config/redis.js';
-import { createClient } from 'redis';
+import { QueueService } from '../services/queue.service.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -39,7 +38,7 @@ export class ImportController {
         rows: valid
       };
 
-      await redisClient.publish('csv_imports', JSON.stringify(taskPayload));
+      await QueueService.publish('csv_imports', JSON.stringify(taskPayload));
 
       // Return 202 Accepted with preview statistics
       res.status(202).json({
@@ -67,22 +66,17 @@ export class ImportController {
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
-    const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-    const sub = createClient({ url: redisUrl });
-    await sub.connect();
-
     console.log(`SSE Client connected to import run: ${runId}`);
+
+    // Subscribe to progress events channel via QueueService
+    const unsubscribe = await QueueService.subscribe(`import_progress:${runId}`, (message) => {
+      res.write(`data: ${message}\n\n`);
+    });
 
     // Clean up connections when client disconnects
     req.on('close', async () => {
       console.log(`SSE Client disconnected from import run: ${runId}`);
-      await sub.unsubscribe(`import_progress:${runId}`);
-      await sub.disconnect();
-    });
-
-    // Subscribe to progress events channel
-    await sub.subscribe(`import_progress:${runId}`, (message) => {
-      res.write(`data: ${message}\n\n`);
+      await unsubscribe();
     });
   }
 
