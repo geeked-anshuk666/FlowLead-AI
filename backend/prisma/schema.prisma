@@ -41,6 +41,7 @@ model Lead {
   possessionTime            String?    @map("possession_time")
   description               String?
   deletedAt                 DateTime?  @map("deleted_at")
+  updatedAt                 DateTime?  @map("updated_at")
 
   @@map("leads")
   @@index([email])

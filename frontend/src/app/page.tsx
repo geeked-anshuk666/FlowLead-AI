@@ -95,6 +95,8 @@ export default function Home() {
   const [dbLeads, setDbLeads] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [sourceFilter, setSourceFilter] = useState<string>('ALL');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sseRef = useRef<EventSource | null>(null);
@@ -140,7 +142,12 @@ export default function Home() {
             }
           }
         }
-        allLeads.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        // EC: Sort dynamically by max(createdAt, updatedAt) descending so recently updated/created float to top
+        allLeads.sort((a, b) => {
+          const timeA = new Date(a.updatedAt || a.createdAt).getTime();
+          const timeB = new Date(b.updatedAt || b.createdAt).getTime();
+          return timeB - timeA;
+        });
         setDbLeads(allLeads);
       }
     } catch (err) {
@@ -498,12 +505,17 @@ export default function Home() {
 
   const filteredLeads = dbLeads.filter(lead => {
     const query = searchQuery.toLowerCase();
-    return (
+    const matchesSearch = (
       (lead.name && lead.name.toLowerCase().includes(query)) ||
       (lead.email && lead.email.toLowerCase().includes(query)) ||
       (lead.company && lead.company.toLowerCase().includes(query)) ||
       (lead.mobileWithoutCountryCode && lead.mobileWithoutCountryCode.includes(query))
     );
+
+    const matchesStatus = statusFilter === 'ALL' || lead.crmStatus === statusFilter;
+    const matchesSource = sourceFilter === 'ALL' || lead.dataSource === sourceFilter;
+
+    return matchesSearch && matchesStatus && matchesSource;
   });
 
   return (
@@ -651,19 +663,48 @@ export default function Home() {
                 </button>
               </div>
             ) : (
-              <div className="px-8 py-5 border-b border-neutral-900/20 bg-neutral-950/10 flex flex-col sm:flex-row justify-between items-center gap-4">
-                <div className="relative w-full sm:max-w-xs">
-                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
-                  <input
-                    type="text"
-                    placeholder="Enter email or phone number..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-neutral-900/50 hover:bg-neutral-900/70 border border-neutral-800/80 focus:border-neutral-700 rounded-xl text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none transition-all"
-                  />
+              <div className="px-8 py-5 border-b border-neutral-900/20 bg-neutral-950/10 flex flex-col lg:flex-row justify-between items-center gap-4">
+                <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto items-center">
+                  <div className="relative w-full sm:w-64">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+                    <input
+                      type="text"
+                      placeholder="Enter email or phone number..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 bg-neutral-900/50 hover:bg-neutral-900/70 border border-neutral-800/80 focus:border-neutral-700 rounded-xl text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none transition-all"
+                    />
+                  </div>
+
+                  {/* CRM Status Filter */}
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="w-full sm:w-40 px-3 py-2.5 bg-neutral-900/50 hover:bg-neutral-900/70 border border-neutral-800/80 focus:border-neutral-700 rounded-xl text-xs text-neutral-350 focus:outline-none transition-all cursor-pointer"
+                  >
+                    <option value="ALL">All Statuses</option>
+                    <option value="GOOD_LEAD_FOLLOW_UP">GOOD_FOLLOW_UP</option>
+                    <option value="DID_NOT_CONNECT">DID_NOT_CONNECT</option>
+                    <option value="BAD_LEAD">BAD_LEAD</option>
+                    <option value="SALE_DONE">SALE_DONE</option>
+                  </select>
+
+                  {/* Data Source Filter */}
+                  <select
+                    value={sourceFilter}
+                    onChange={(e) => setSourceFilter(e.target.value)}
+                    className="w-full sm:w-40 px-3 py-2.5 bg-neutral-900/50 hover:bg-neutral-900/70 border border-neutral-800/80 focus:border-neutral-700 rounded-xl text-xs text-neutral-350 focus:outline-none transition-all cursor-pointer"
+                  >
+                    <option value="ALL">All Sources</option>
+                    <option value="leads_on_demand">Leads On Demand</option>
+                    <option value="meridian_tower">Meridian Tower</option>
+                    <option value="eden_park">Eden Park</option>
+                    <option value="varah_swamy">Varah Swamy</option>
+                    <option value="sarjapur_plots">Sarjapur Plots</option>
+                  </select>
                 </div>
 
-                <div className="flex gap-2.5 w-full sm:w-auto justify-end">
+                <div className="flex gap-2.5 w-full lg:w-auto justify-end">
                   <button
                     onClick={fetchLeads}
                     className="p-2.5 bg-neutral-900/50 border border-neutral-800/80 rounded-xl text-neutral-400 hover:text-neutral-200 transition-all active:scale-[0.96]"
@@ -740,7 +781,29 @@ export default function Home() {
                                 <X className="w-3 h-3 stroke-[2.5]" />
                               </button>
                             </td>
-                            <td className="p-4 font-bold whitespace-nowrap text-neutral-200">{lead.name || '-'}</td>
+                            <td className="p-4 font-bold whitespace-nowrap text-neutral-200 flex items-center gap-2">
+                              <span>{lead.name || '-'}</span>
+                              {(() => {
+                                const now = Date.now();
+                                const createdTime = new Date(lead.createdAt).getTime();
+                                const updatedTime = lead.updatedAt ? new Date(lead.updatedAt).getTime() : 0;
+                                
+                                if (updatedTime > 0 && now - updatedTime < 120000) { // 2 minutes
+                                  return (
+                                    <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-purple-950/60 text-purple-400 border border-purple-800/40 animate-pulse shadow-[0_0_10px_rgba(168,85,247,0.4)]">
+                                      UPDATED
+                                    </span>
+                                  );
+                                } else if (now - createdTime < 120000) { // 2 minutes
+                                  return (
+                                    <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-teal-950/60 text-teal-400 border border-teal-800/40 animate-pulse shadow-[0_0_10px_rgba(20,184,166,0.4)]">
+                                      NEW
+                                    </span>
+                                  );
+                                }
+                                return null;
+                              })()}
+                            </td>
                             <td className="p-4 whitespace-nowrap text-neutral-400">{lead.email || '-'}</td>
                             <td className="p-4 whitespace-nowrap text-neutral-400">
                               {lead.countryCode ? `${lead.countryCode} ` : ''}{lead.mobileWithoutCountryCode || '-'}

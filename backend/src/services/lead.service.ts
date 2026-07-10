@@ -31,30 +31,80 @@ export class LeadService {
   }
 
   public static async saveLeadsBatch(importId: string, leads: any[]) {
-    // Lead mapping parameters ensure standard fields.
-    // Insert leads database records.
-    const createData = leads.map(lead => ({
-      importId,
-      name: lead.name || null,
-      email: lead.email || null,
-      countryCode: lead.country_code || null,
-      mobileWithoutCountryCode: lead.mobile_without_country_code || null,
-      company: lead.company || null,
-      city: lead.city || null,
-      state: lead.state || null,
-      country: lead.country || null,
-      leadOwner: lead.lead_owner || null,
-      crmStatus: lead.crm_status || 'GOOD_LEAD_FOLLOW_UP',
-      crmNote: lead.crm_note || null,
-      dataSource: lead.data_source || null,
-      possessionTime: lead.possession_time || null,
-      description: lead.description || null,
-      createdAt: lead.created_at ? new Date(lead.created_at) : new Date()
-    }));
+    // 1. Gather all emails and mobile numbers to query in one batch
+    const emails = leads.map(l => l.email).filter(Boolean) as string[];
+    const phones = leads.map(l => l.mobile_without_country_code).filter(Boolean) as string[];
 
-    return await prisma.lead.createMany({
-      data: createData
+    // 2. Fetch existing leads matching either email or phone
+    const existingLeads = await prisma.lead.findMany({
+      where: {
+        OR: [
+          { email: { in: emails } },
+          { mobileWithoutCountryCode: { in: phones } }
+        ]
+      }
     });
+
+    for (const lead of leads) {
+      // Find matching existing lead
+      const matched = existingLeads.find(existing => 
+        (lead.email && existing.email && existing.email.toLowerCase() === lead.email.toLowerCase()) ||
+        (lead.mobile_without_country_code && existing.mobileWithoutCountryCode && existing.mobileWithoutCountryCode === lead.mobile_without_country_code)
+      );
+
+      // Map fields, keeping existing fields if incoming are empty
+      const leadData = {
+        importId,
+        name: lead.name || (matched ? matched.name : null),
+        email: lead.email || (matched ? matched.email : null),
+        countryCode: lead.country_code || (matched ? matched.countryCode : null),
+        mobileWithoutCountryCode: lead.mobile_without_country_code || (matched ? matched.mobileWithoutCountryCode : null),
+        company: lead.company || (matched ? matched.company : null),
+        city: lead.city || (matched ? matched.city : null),
+        state: lead.state || (matched ? matched.state : null),
+        country: lead.country || (matched ? matched.country : null),
+        leadOwner: lead.lead_owner || (matched ? matched.leadOwner : null),
+        crmStatus: lead.crm_status || (matched ? matched.crmStatus : 'GOOD_LEAD_FOLLOW_UP'),
+        crmNote: lead.crm_note || (matched ? matched.crmNote : null),
+        dataSource: lead.data_source || (matched ? matched.dataSource : null),
+        possessionTime: lead.possession_time || (matched ? matched.possessionTime : null),
+        description: lead.description || (matched ? matched.description : null),
+        updatedAt: new Date()
+      };
+
+      if (matched) {
+        const oldImportId = matched.importId;
+        // Update existing lead (Intelligent Upsert)
+        await prisma.lead.update({
+          where: { id: matched.id },
+          data: leadData
+        });
+
+        // Decrement the processed records count of the old run if the association changed
+        if (oldImportId && oldImportId !== importId) {
+          try {
+            await prisma.importRun.update({
+              where: { id: oldImportId },
+              data: {
+                processedRecords: { decrement: 1 }
+              }
+            });
+          } catch (err) {
+            console.error(`Failed to decrement processedRecords for old run ${oldImportId}:`, err);
+          }
+        }
+      } else {
+        // Create new lead
+        await prisma.lead.create({
+          data: {
+            ...leadData,
+            createdAt: lead.created_at ? new Date(lead.created_at) : new Date()
+          }
+        });
+      }
+    }
+
+    return { count: leads.length };
   }
 
   public static async getImportRuns() {
