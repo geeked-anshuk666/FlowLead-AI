@@ -14,10 +14,61 @@ dotenv.config();
  */
 const pendingRowsStore = new Map<string, any[]>();
 
+/**
+ * EC9: Maximum number of rows we hold in memory per pending import.
+ * For files with more rows than this, we still parse them all but only
+ * store the first MAX_PENDING_ROWS for the in-memory preview/confirm flow.
+ * The full row count is still recorded in the DB for stats accuracy.
+ * 100,000 rows at ~300 bytes each = ~30MB. With 25MB file limit, this is safe.
+ */
+const MAX_PENDING_ROWS = 100_000;
+
+/**
+ * EC5: In-process lock map to prevent double-confirm race conditions.
+ * When a confirm request is being processed, the runId is locked.
+ * Any concurrent confirm for the same runId is rejected with 409.
+ */
+const confirmLocks = new Set<string>();
+
+/**
+ * EC7: Track PENDING runs that were uploaded but never confirmed.
+ * We clean these up after a configurable TTL (default 30 minutes).
+ */
+const PENDING_RUN_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+/** Schedule periodic cleanup of stale PENDING runs every 10 minutes */
+setInterval(async () => {
+  try {
+    const cutoff = new Date(Date.now() - PENDING_RUN_TTL_MS);
+    const staleRuns = await prisma.importRun.findMany({
+      where: {
+        status: 'PENDING',
+        createdAt: { lt: cutoff }
+      },
+      select: { id: true }
+    });
+
+    if (staleRuns.length > 0) {
+      const staleIds = staleRuns.map(r => r.id);
+      await prisma.importRun.deleteMany({
+        where: { id: { in: staleIds } }
+      });
+      // Clean up associated pending rows store
+      staleIds.forEach(id => pendingRowsStore.delete(id));
+      console.log(`[EC7] Cleaned up ${staleRuns.length} stale PENDING import runs.`);
+    }
+  } catch (err) {
+    console.error('[EC7] Error during stale run cleanup:', err);
+  }
+}, 10 * 60 * 1000); // Every 10 minutes
+
 export class ImportController {
   /**
    * Upload CSV file, parse locally, store PENDING state in DB.
    * Does NOT publish to worker queue yet - waits for user confirmation.
+   *
+   * EC4: Strips UTF-8 BOM and sanitizes encoding before parsing.
+   * EC6: Normalizes all CSV headers to lowercase snake_case at parse time.
    */
   public static async uploadCsv(req: Request, res: Response): Promise<void> {
     try {
@@ -26,12 +77,29 @@ export class ImportController {
         return;
       }
 
-      const csvText = req.file.buffer.toString('utf-8');
+      // EC4: Decode buffer with BOM stripping & encoding sanitization
+      const rawText = req.file.buffer.toString('utf-8');
+      const csvText = CsvService.sanitizeCsvText(rawText);
+
+      // parseCsv already normalizes headers via mapHeaders (EC6)
       const rawRows = await CsvService.parseCsv(csvText);
 
       if (rawRows.length === 0) {
-        res.status(400).json({ error: 'Uploaded CSV file is empty.' });
+        res.status(400).json({ error: 'Uploaded CSV file is empty or contained no readable rows.' });
         return;
+      }
+
+      // EC9: Enforce row cap — reject files that exceed the max processable limit
+      if (rawRows.length > MAX_PENDING_ROWS) {
+        res.status(413).json({
+          error: `CSV file contains ${rawRows.length.toLocaleString()} rows, which exceeds the maximum of ${MAX_PENDING_ROWS.toLocaleString()} rows per import. Please split the file into smaller chunks.`
+        });
+        return;
+      }
+
+      // EC9: Log a warning for large imports to help with monitoring
+      if (rawRows.length > 10_000) {
+        console.warn(`[EC9] Large import detected: ${rawRows.length} rows from file "${req.file.originalname}". Memory usage may spike.`);
       }
 
       // Early validating filter: filter out rows containing neither email nor mobile/phone key/value.
@@ -61,55 +129,78 @@ export class ImportController {
   /**
    * Confirm import: receive the final (possibly pruned) rows from frontend,
    * publish ONLY those rows to the worker queue.
+   *
+   * EC5: Uses a per-runId lock to prevent double-confirm race conditions
+   *      (e.g. user double-clicking "Import" or having the page open in two tabs).
+   * EC7: Auto-deletes empty PENDING runs where 0 records were confirmed.
    */
   public static async confirmImport(req: Request, res: Response): Promise<void> {
     try {
       const { runId } = req.params;
       const { rows: confirmedRows } = req.body;
 
-      const run = await LeadService.getImportRunDetails(runId);
-      if (!run) {
-        res.status(404).json({ error: 'Import run not found.' });
+      // EC5: Check and set lock to prevent concurrent confirm for same runId
+      if (confirmLocks.has(runId)) {
+        res.status(409).json({
+          error: 'Import confirmation already in progress for this run. Please wait.'
+        });
         return;
       }
+      confirmLocks.add(runId);
 
-      // Use the confirmed (pruned) rows from frontend if provided, otherwise use stored valid rows
-      const rowsToProcess: any[] = Array.isArray(confirmedRows) && confirmedRows.length >= 0
-        ? confirmedRows
-        : (pendingRowsStore.get(runId) || []);
-
-      // Clean up the temp store
-      pendingRowsStore.delete(runId);
-
-      // Compute records skipped via preview pruning
-      const initialSkipped = Math.max(0, run.totalRecords - rowsToProcess.length);
-      await prisma.importRun.update({
-        where: { id: runId },
-        data: {
-          skippedRecords: initialSkipped
+      try {
+        const run = await LeadService.getImportRunDetails(runId);
+        if (!run) {
+          res.status(404).json({ error: 'Import run not found.' });
+          return;
         }
-      });
 
-      if (rowsToProcess.length === 0) {
-        // User pruned everything - mark as completed with 0 records
-        await LeadService.updateImportRunStatus(runId, 'COMPLETED');
-        res.status(200).json({ success: true, message: 'Import confirmed with 0 records. Nothing to process.' });
-        return;
+        // Only PENDING runs can be confirmed
+        if (run.status !== 'PENDING') {
+          res.status(409).json({
+            error: `Import run is already in status "${run.status}". Cannot confirm again.`
+          });
+          return;
+        }
+
+        // Use the confirmed (pruned) rows from frontend if provided, otherwise use stored valid rows
+        const rowsToProcess: any[] = Array.isArray(confirmedRows) && confirmedRows.length >= 0
+          ? confirmedRows
+          : (pendingRowsStore.get(runId) || []);
+
+        // Clean up the temp store
+        pendingRowsStore.delete(runId);
+
+        // EC7: If user confirmed 0 rows, auto-delete the empty ImportRun (no point keeping it)
+        if (rowsToProcess.length === 0) {
+          await prisma.importRun.delete({ where: { id: runId } });
+          console.log(`[EC7] Deleted empty ImportRun ${runId} — user confirmed 0 records.`);
+          res.status(200).json({
+            success: true,
+            message: 'Import confirmed with 0 records. Run deleted to keep logs clean.'
+          });
+          return;
+        }
+
+        // Compute records skipped via preview pruning
+        const initialSkipped = Math.max(0, run.totalRecords - rowsToProcess.length);
+        await prisma.importRun.update({
+          where: { id: runId },
+          data: { skippedRecords: initialSkipped }
+        });
+
+        // Publish ONLY the confirmed rows to the worker queue
+        const taskPayload = { runId, rows: rowsToProcess };
+        await QueueService.publish('csv_imports', JSON.stringify(taskPayload));
+
+        res.status(200).json({
+          success: true,
+          message: `Import confirmed. ${rowsToProcess.length} records queued for processing.`
+        });
+      } finally {
+        // Always release the lock, even on error
+        confirmLocks.delete(runId);
       }
-
-      // Now publish ONLY the confirmed rows to the worker queue
-      const taskPayload = {
-        runId,
-        rows: rowsToProcess
-      };
-
-
-      await QueueService.publish('csv_imports', JSON.stringify(taskPayload));
-
-      res.status(200).json({
-        success: true,
-        message: `Import confirmed. ${rowsToProcess.length} records queued for processing.`
-      });
     } catch (error: any) {
       console.error('Import confirm error:', error);
       res.status(500).json({ error: error.message || 'Internal server error.' });

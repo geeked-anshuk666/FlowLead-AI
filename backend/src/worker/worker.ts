@@ -2,6 +2,7 @@ import { connectDb } from '../config/db.js';
 import { LeadService } from '../services/lead.service.js';
 import { AiService } from '../services/ai.service.js';
 import { QueueService } from '../services/queue.service.js';
+import { prisma } from '../config/db.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -25,6 +26,7 @@ async function startWorker() {
 
       let processedCount = 0;
       let totalSkipped = 0;
+      let aiExhausted = false;
 
       // Dynamically compute batch size for better UX on smaller files
       const dynamicBatchSize = rows.length < 30 ? Math.max(1, Math.ceil(rows.length / 5)) : BATCH_SIZE;
@@ -61,9 +63,44 @@ async function startWorker() {
               skipped: totalSkipped
             })
           );
-        } catch (batchErr) {
-          console.error(`Failed to process batch indices ${i} to ${i + batch.length}:`, batchErr);
-          // Mark the entire batch as skipped on failure to keep pipeline moving
+        } catch (batchErr: any) {
+          const errMsg = batchErr?.message || String(batchErr);
+          console.error(`Failed to process batch indices ${i} to ${i + batch.length}:`, errMsg);
+
+          // EC10: Detect AI quota/key exhaustion — fail the entire run immediately
+          const isAiExhaustion = errMsg.includes('All AI Mapping services exhausted') ||
+            errMsg.includes('quota') ||
+            errMsg.includes('429') ||
+            errMsg.includes('rate limit');
+
+          if (isAiExhaustion) {
+            aiExhausted = true;
+            console.error(`[EC10] AI key quota exhausted for run ${runId}. Marking as FAILED.`);
+
+            // Update run status to FAILED and record the error reason
+            await prisma.importRun.update({
+              where: { id: runId },
+              data: {
+                status: 'FAILED',
+                skippedRecords: { increment: rows.length - i } // All remaining rows are skipped
+              }
+            });
+
+            // Publish FAILED event so the frontend can surface the error
+            await QueueService.publish(
+              `import_progress:${runId}`,
+              JSON.stringify({
+                status: 'FAILED',
+                progress: Math.round((i / rows.length) * 100),
+                processed: processedCount,
+                skipped: totalSkipped + (rows.length - i),
+                error: 'AI mapping service quota exhausted. Check your API key limits and try again.'
+              })
+            );
+            return; // Stop processing this run entirely
+          }
+
+          // Non-AI error: mark the entire batch as skipped and continue
           totalSkipped += batch.length;
           await LeadService.incrementImportCounts(runId, 0, batch.length);
 
@@ -82,18 +119,20 @@ async function startWorker() {
         await sleep(800);
       }
 
-      // Mark the run as COMPLETED
-      await LeadService.updateImportRunStatus(runId, 'COMPLETED');
-      await QueueService.publish(
-        `import_progress:${runId}`,
-        JSON.stringify({
-          status: 'COMPLETED',
-          progress: 100,
-          processed: processedCount,
-          skipped: totalSkipped
-        })
-      );
-      console.log(`Finished processing Import Run: ${runId}`);
+      // Only mark as COMPLETED if AI was not exhausted mid-run
+      if (!aiExhausted) {
+        await LeadService.updateImportRunStatus(runId, 'COMPLETED');
+        await QueueService.publish(
+          `import_progress:${runId}`,
+          JSON.stringify({
+            status: 'COMPLETED',
+            progress: 100,
+            processed: processedCount,
+            skipped: totalSkipped
+          })
+        );
+        console.log(`Finished processing Import Run: ${runId}`);
+      }
     } catch (err) {
       console.error('Error in subscriber loop:', err);
     }

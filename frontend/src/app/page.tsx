@@ -36,6 +36,8 @@ export default function Home() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importStep, setImportStep] = useState<1 | 2 | 3>(1);
   const [isModalAnimating, setIsModalAnimating] = useState(false);
+  // EC5 frontend: prevent double-clicking "Import X Leads" button
+  const [isConfirming, setIsConfirming] = useState(false);
 
   // Shared confirmation dialog for both delete contexts
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -96,6 +98,8 @@ export default function Home() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sseRef = useRef<EventSource | null>(null);
+  // EC8: polling interval ref for SSE fallback
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:5000/api';
 
@@ -210,13 +214,16 @@ export default function Home() {
 
   const startImportPipeline = async () => {
     if (!uploadData) return;
+    // EC5 frontend guard: prevent double-click / re-entry
+    if (isConfirming) return;
 
+    setIsConfirming(true);
     setError(null);
     setIsProcessing(true);
     setStatusMessage('Sending confirmed records to worker queue...');
 
     try {
-      // BUG FIX: Send the (possibly pruned) rows to the confirm endpoint.
+      // Send the (possibly pruned) rows to the confirm endpoint.
       // The worker has NOT processed anything yet - upload only parsed and stored rows.
       const confirmRes = await fetch(`${API_BASE}/imports/${uploadData.runId}/confirm`, {
         method: 'POST',
@@ -228,8 +235,6 @@ export default function Home() {
         const errData = await confirmRes.json();
         throw new Error(errData.error || 'Failed to confirm import.');
       }
-
-      const confirmData = await confirmRes.json();
 
       // If user pruned all rows to 0, skip to a completed state immediately
       if (uploadData.previewRows.length === 0) {
@@ -243,6 +248,7 @@ export default function Home() {
           leads: []
         });
         fetchHistory();
+        setIsConfirming(false);
         return;
       }
 
@@ -255,14 +261,70 @@ export default function Home() {
 
       setStatusMessage(`Mapping ${uploadData.previewRows.length} leads dynamically...`);
 
-      const sse = new EventSource(`${API_BASE}/imports/${uploadData.runId}/progress`);
+      /**
+       * EC8: SSE with automatic HTTP polling fallback.
+       * If SSE fails (proxy timeout, network flap, browser limits),
+       * we fall back to polling GET /api/imports/:runId every 2s
+       * until the run reaches COMPLETED or FAILED.
+       */
+      const runId = uploadData.runId;
+      let sseFailed = false;
+
+      const startPollingFallback = () => {
+        if (pollRef.current) return; // Already polling
+        console.warn('[EC8] SSE unavailable — switching to HTTP polling fallback.');
+        setStatusMessage('Processing leads... (polling mode)');
+
+        pollRef.current = setInterval(async () => {
+          try {
+            const pollRes = await fetch(`${API_BASE}/imports/${runId}`);
+            if (!pollRes.ok) return;
+            const data = await pollRes.json();
+
+            if (data.status === 'COMPLETED') {
+              clearInterval(pollRef.current!);
+              pollRef.current = null;
+              setIsProcessing(false);
+              setProgress(100);
+              setStatusMessage('Import completed successfully!');
+              setStats({
+                processed: data.processedRecords,
+                skipped: data.skippedRecords
+              });
+              setImportResult(data);
+              fetchHistory();
+              fetchLeads();
+            } else if (data.status === 'FAILED') {
+              clearInterval(pollRef.current!);
+              pollRef.current = null;
+              setIsProcessing(false);
+              setStatusMessage('Import failed. Check logs for details.');
+              setError('Import run failed on the server. Please try again.');
+            } else if (data.status === 'PROCESSING') {
+              // Estimate progress from DB counts
+              const total = data.totalRecords || 1;
+              const done = (data.processedRecords || 0) + (data.skippedRecords || 0);
+              const est = Math.min(95, Math.round((done / total) * 100));
+              setProgress(est);
+              setStats({
+                processed: data.processedRecords,
+                skipped: data.skippedRecords
+              });
+            }
+          } catch (pollErr) {
+            console.error('[EC8] Polling error:', pollErr);
+          }
+        }, 2000);
+      };
+
+      const sse = new EventSource(`${API_BASE}/imports/${runId}/progress`);
       sseRef.current = sse;
 
       sse.onmessage = (event) => {
         try {
           const update = JSON.parse(event.data);
-          setProgress(update.progress);
-          setStats({ processed: update.processed, skipped: update.skipped });
+          setProgress(update.progress ?? 0);
+          setStats({ processed: update.processed ?? 0, skipped: update.skipped ?? 0 });
 
           if (update.status === 'PROCESSING') {
             setStatusMessage(`Mapping leads dynamically... ${update.progress}%`);
@@ -270,9 +332,26 @@ export default function Home() {
             setStatusMessage('Import completed successfully!');
             setIsProcessing(false);
             sse.close();
-            fetchImportDetails(uploadData.runId);
+            if (pollRef.current) {
+              clearInterval(pollRef.current);
+              pollRef.current = null;
+            }
+            fetchImportDetails(runId);
             fetchHistory();
             fetchLeads();
+          } else if (update.status === 'FAILED') {
+            // EC10: AI quota exhaustion or other terminal failure
+            const errMsg = update.error || 'Import failed on the server. Please check your API key and try again.';
+            setStatusMessage('Import failed.');
+            setError(errMsg);
+            setIsProcessing(false);
+            sse.close();
+            sseRef.current = null;
+            if (pollRef.current) {
+              clearInterval(pollRef.current);
+              pollRef.current = null;
+            }
+            fetchHistory();
           }
         } catch (err) {
           console.error('Error parsing SSE event data:', err);
@@ -280,14 +359,22 @@ export default function Home() {
       };
 
       sse.onerror = (err) => {
-        console.error('SSE connection lost, polling final status...', err);
-        setIsProcessing(false);
-        sse.close();
-        fetchImportDetails(uploadData.runId);
+        if (!sseFailed) {
+          sseFailed = true;
+          console.error('[EC8] SSE connection lost, switching to HTTP polling fallback...', err);
+          sse.close();
+          sseRef.current = null;
+          // Only start polling if still processing (i.e. not already completed via SSE)
+          if (isProcessing) {
+            startPollingFallback();
+          }
+        }
       };
     } catch (err: any) {
       setError(err.message || 'Failed to start import pipeline.');
       setIsProcessing(false);
+    } finally {
+      setIsConfirming(false);
     }
   };
 
@@ -395,7 +482,13 @@ export default function Home() {
     setProgress(0);
     setError(null);
     setIsModalAnimating(false);
+    setIsConfirming(false);
     setImportStep(1);
+    // EC8: Clean up any active polling interval on modal close
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
   };
 
   const closeImportModal = () => {
@@ -940,6 +1033,29 @@ export default function Home() {
                         </div>
                       )}
                     </div>
+                  ) : error ? (
+                    /* EC10: Show error state when import fails (e.g., AI quota exhausted) */
+                    <div className="max-w-xl mx-auto w-full space-y-6">
+                      <div className="bg-red-950/20 border border-red-900/30 p-5 rounded-2xl flex items-center gap-4">
+                        <XCircle className="w-6 h-6 text-red-400 shrink-0" />
+                        <div>
+                          <h4 className="text-sm font-bold text-red-400">Import Pipeline Failed</h4>
+                          <p className="text-xs text-neutral-400 mt-1 leading-relaxed">{error}</p>
+                        </div>
+                      </div>
+                      {stats && (
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="bg-neutral-950/40 p-4 rounded-xl border border-neutral-900/30">
+                            <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider block">Partially Imported</span>
+                            <span className="text-lg font-bold text-teal-400 mt-1 block">{stats.processed}</span>
+                          </div>
+                          <div className="bg-neutral-950/40 p-4 rounded-xl border border-neutral-900/30">
+                            <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider block">Skipped / Failed</span>
+                            <span className="text-lg font-bold text-red-400 mt-1 block">{stats.skipped}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   ) : (
                     importResult && (
                       <div className="max-w-xl mx-auto w-full space-y-6">
@@ -970,6 +1086,7 @@ export default function Home() {
                 </div>
               )}
 
+
             </div>
 
             {/* Modal Footer: Glaring line removed */}
@@ -992,10 +1109,10 @@ export default function Home() {
                 {importStep === 2 && uploadData && (
                   <button
                     onClick={startImportPipeline}
-                    disabled={isModalAnimating}
-                    className="px-5 py-2.5 bg-neutral-100 hover:bg-neutral-200 disabled:opacity-50 text-neutral-950 text-xs font-bold rounded-xl shadow-lg transition-all duration-300"
+                    disabled={isModalAnimating || isConfirming}
+                    className="px-5 py-2.5 bg-neutral-100 hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed text-neutral-950 text-xs font-bold rounded-xl shadow-lg transition-all duration-300"
                   >
-                    Import {uploadData.previewRows.length} Leads
+                    {isConfirming ? 'Submitting...' : `Import ${uploadData.previewRows.length} Leads`}
                   </button>
                 )}
                 {importStep === 3 && !isProcessing && (

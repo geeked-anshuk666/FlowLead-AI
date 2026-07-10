@@ -78,15 +78,44 @@ export class LeadService {
       select: { importId: true }
     });
     if (lead && lead.importId) {
-      await prisma.importRun.update({
+      const parentRun = await prisma.importRun.findUnique({
         where: { id: lead.importId },
-        data: {
-          processedRecords: { decrement: 1 }
-        }
+        include: { leads: true }
       });
+      if (parentRun) {
+        if (parentRun.leads.length <= 1) {
+          // Parent run has only 1 lead left (this one) — delete the run which cascades to the lead
+          await prisma.importRun.delete({
+            where: { id: lead.importId }
+          });
+          return { id };
+        } else {
+          await prisma.importRun.update({
+            where: { id: lead.importId },
+            data: {
+              processedRecords: { decrement: 1 }
+            }
+          });
+        }
+      }
     }
     return await prisma.lead.delete({
       where: { id }
     });
   }
+
+  public static async cleanupStuckRuns() {
+    try {
+      const result = await prisma.importRun.updateMany({
+        where: { status: 'PROCESSING' },
+        data: { status: 'FAILED' }
+      });
+      if (result.count > 0) {
+        console.log(`[Startup Cleanup] Marked ${result.count} stuck PROCESSING runs as FAILED.`);
+      }
+    } catch (err) {
+      console.error('[Startup Cleanup] Failed to clean stuck runs:', err);
+    }
+  }
 }
+
