@@ -118,7 +118,7 @@ export class ImportController {
         totalRecords: rawRows.length,
         validCount: valid.length,
         skippedCount: skippedCount,
-        previewRows: rawRows.slice(0, 50) // Show up to first 50 rows for preview
+        previewRows: valid.slice(0, 10) // Show only the first 10 valid rows for preview as requested
       });
     } catch (error: any) {
       console.error('Import upload error:', error);
@@ -137,7 +137,7 @@ export class ImportController {
   public static async confirmImport(req: Request, res: Response): Promise<void> {
     try {
       const { runId } = req.params;
-      const { rows: confirmedRows } = req.body;
+      const { excludedIndices } = req.body;
 
       // EC5: Check and set lock to prevent concurrent confirm for same runId
       if (confirmLocks.has(runId)) {
@@ -163,10 +163,15 @@ export class ImportController {
           return;
         }
 
-        // Use the confirmed (pruned) rows from frontend if provided, otherwise use stored valid rows
-        const rowsToProcess: any[] = Array.isArray(confirmedRows) && confirmedRows.length >= 0
-          ? confirmedRows
-          : (pendingRowsStore.get(runId) || []);
+        // Retrieve valid stored rows from pendingRowsStore
+        const allStoredRows = pendingRowsStore.get(runId) || [];
+
+        // Apply exclusion filters if excludedIndices are provided by the user
+        let rowsToProcess = allStoredRows;
+        if (Array.isArray(excludedIndices) && excludedIndices.length > 0) {
+          const excludeSet = new Set(excludedIndices);
+          rowsToProcess = allStoredRows.filter((_, idx) => !excludeSet.has(idx));
+        }
 
         // Clean up the temp store
         pendingRowsStore.delete(runId);
@@ -182,7 +187,7 @@ export class ImportController {
           return;
         }
 
-        // Compute records skipped via preview pruning
+        // Compute records skipped via preview pruning or early filters
         const initialSkipped = Math.max(0, run.totalRecords - rowsToProcess.length);
         await prisma.importRun.update({
           where: { id: runId },

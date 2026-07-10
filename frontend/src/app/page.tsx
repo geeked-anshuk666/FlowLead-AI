@@ -111,6 +111,7 @@ export default function Home() {
   const [serverState, setServerState] = useState<'checking' | 'sleeping' | 'ready' | 'online'>('checking');
   const [showWakeModal, setShowWakeModal] = useState(false);
   const [wakeProgress, setWakeProgress] = useState(0);
+  const [excludedIndices, setExcludedIndices] = useState<number[]>([]);
 
   useEffect(() => {
     checkServerStatus();
@@ -269,6 +270,12 @@ export default function Home() {
       }
 
       const data = await res.json();
+      if (data && Array.isArray(data.previewRows)) {
+        data.previewRows = data.previewRows.map((row: any, idx: number) => ({
+          ...row,
+          __originalIndex: idx
+        }));
+      }
       setUploadData(data);
       setImportStep(2);
     } catch (err: any) {
@@ -295,7 +302,7 @@ export default function Home() {
       const confirmRes = await fetch(`${API_BASE}/imports/${uploadData.runId}/confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows: uploadData.previewRows })
+        body: JSON.stringify({ excludedIndices })
       });
 
       if (!confirmRes.ok) {
@@ -304,14 +311,14 @@ export default function Home() {
       }
 
       // If user pruned all rows to 0, skip to a completed state immediately
-      if (uploadData.previewRows.length === 0) {
+      if (uploadData.validCount === 0) {
         setImportStep(3);
         setIsProcessing(false);
         setStatusMessage('Import completed - 0 records were selected for import.');
         setImportResult({
           ...uploadData,
           processedRecords: 0,
-          skippedRecords: 0,
+          skippedRecords: uploadData.totalRecords,
           leads: []
         });
         fetchHistory();
@@ -326,7 +333,7 @@ export default function Home() {
         setIsModalAnimating(false);
       }, 350);
 
-      setStatusMessage(`Mapping ${uploadData.previewRows.length} leads dynamically...`);
+      setStatusMessage(`Mapping ${uploadData.validCount} leads dynamically...`);
 
       /**
        * EC8: SSE with automatic HTTP polling fallback.
@@ -482,6 +489,10 @@ export default function Home() {
   // Remove a specific record row from the upload data state prior to import
   const handleRemoveRecord = (rowIdxToRemove: number) => {
     if (!uploadData) return;
+    const targetRow = uploadData.previewRows[rowIdxToRemove];
+    if (targetRow && targetRow.__originalIndex !== undefined) {
+      setExcludedIndices(prev => [...prev, targetRow.__originalIndex]);
+    }
     const updatedRows = [...uploadData.previewRows];
     updatedRows.splice(rowIdxToRemove, 1);
 
@@ -544,6 +555,7 @@ export default function Home() {
   const resetState = () => {
     setFile(null);
     setUploadData(null);
+    setExcludedIndices([]);
     setImportResult(null);
     setStats(null);
     setProgress(0);
@@ -1217,7 +1229,7 @@ export default function Home() {
               <div>
                 {uploadData && importStep === 2 && (
                   <span className="text-xs text-neutral-550 tracking-wide font-semibold">
-                    {uploadData.fileName} • {uploadData.previewRows.length} records ready
+                    {uploadData.fileName} • {uploadData.validCount.toLocaleString()} records ready
                   </span>
                 )}
               </div>
@@ -1235,7 +1247,7 @@ export default function Home() {
                     disabled={isModalAnimating || isConfirming}
                     className="px-5 py-2.5 bg-neutral-100 hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed text-neutral-950 text-xs font-bold rounded-xl shadow-lg transition-all duration-300"
                   >
-                    {isConfirming ? 'Submitting...' : `Import ${uploadData.previewRows.length} Leads`}
+                    {isConfirming ? 'Submitting...' : `Import ${uploadData.validCount.toLocaleString()} Leads`}
                   </button>
                 )}
                 {importStep === 3 && !isProcessing && (
