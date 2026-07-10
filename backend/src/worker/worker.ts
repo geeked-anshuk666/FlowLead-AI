@@ -17,6 +17,8 @@ async function startWorker() {
 
   console.log('Worker listening on channel "csv_imports"...');
 
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
   await QueueService.subscribe('csv_imports', async (message) => {
     try {
       const task = JSON.parse(message);
@@ -41,17 +43,46 @@ async function startWorker() {
         batchStarts.push(i);
       }
 
+      const totalGroups = Math.ceil(batchStarts.length / PARALLEL_BATCHES);
+      const targetGroupDurationMs = 15000; // 15 seconds target per group of 3 calls (~12 RPM rate limit safety)
+
       // Process PARALLEL_BATCHES batches at a time.
-      // Promise.allSettled is used so a single bad batch does not abort the others.
       for (let g = 0; g < batchStarts.length; g += PARALLEL_BATCHES) {
         if (aiExhausted) break;
+
+        const groupStartTime = Date.now();
+        const currentGroupIndex = g / PARALLEL_BATCHES;
+        const remainingGroups = totalGroups - (currentGroupIndex + 1);
+        const estimatedTimeRemainingSeconds = remainingGroups * (targetGroupDurationMs / 1000);
 
         const group = batchStarts.slice(g, g + PARALLEL_BATCHES);
 
         const groupResults = await Promise.allSettled(
           group.map(async (startIdx) => {
             const batch = rows.slice(startIdx, startIdx + effectiveBatchSize);
-            const mappedLeads = await AiService.mapLeadsBatch(batch);
+            
+            // Call AI with a retry loop on 429 / Rate Limit
+            let mappedLeads: any[] = [];
+            let retriesLeft = 3;
+            
+            while (retriesLeft >= 0) {
+              try {
+                mappedLeads = await AiService.mapLeadsBatch(batch);
+                break; // Success!
+              } catch (err: any) {
+                const errMsg = err?.message || String(err);
+                const isRateLimit = errMsg.includes('quota') || errMsg.includes('429') || errMsg.includes('rate limit');
+                
+                if (isRateLimit && retriesLeft > 0) {
+                  console.warn(`Rate limit hit during batch mapping. Retrying in 8s... (${retriesLeft} retries left)`);
+                  retriesLeft--;
+                  await sleep(8000);
+                } else {
+                  throw err; // Out of retries or non-rate-limit error
+                }
+              }
+            }
+
             if (mappedLeads.length > 0) {
               await LeadService.saveLeadsBatch(runId, mappedLeads);
             }
@@ -107,7 +138,6 @@ async function startWorker() {
             }
 
             // Non-quota batch error: count all rows in the failed batch as skipped
-            // Find the original batch to know how many rows were in it
             const failedBatchIdx = group[groupResults.indexOf(result)];
             const failedBatch = rows.slice(failedBatchIdx, failedBatchIdx + effectiveBatchSize);
             groupSkipped += failedBatch.length;
@@ -133,9 +163,18 @@ async function startWorker() {
             status: 'PROCESSING',
             progress: progressPercent,
             processed: processedCount,
-            skipped: totalSkipped
+            skipped: totalSkipped,
+            estimatedTimeRemainingSeconds: Math.round(estimatedTimeRemainingSeconds)
           })
         );
+
+        // Throttling safety: ensure this group took at least targetGroupDurationMs to respect RPM limits
+        const groupDuration = Date.now() - groupStartTime;
+        if (groupDuration < targetGroupDurationMs && g + PARALLEL_BATCHES < batchStarts.length) {
+          const sleepDuration = targetGroupDurationMs - groupDuration;
+          console.log(`Group completed quickly (${Math.round(groupDuration/1000)}s). Throttling for ${Math.round(sleepDuration/1000)}s to respect rate limits...`);
+          await sleep(sleepDuration);
+        }
       }
 
       // Only mark as COMPLETED if AI was not exhausted mid-run

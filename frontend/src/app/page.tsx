@@ -84,6 +84,7 @@ export default function Home() {
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState('');
   const [stats, setStats] = useState<{ processed: number; skipped: number } | null>(null);
+  const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
 
   // Final Results
   const [importResult, setImportResult] = useState<{
@@ -397,6 +398,11 @@ export default function Home() {
                 processed: data.processedRecords,
                 skipped: data.skippedRecords
               });
+              // Simple poll estimation
+              if (data.totalRecords) {
+                const remainingBatches = Math.ceil((data.totalRecords - done) / 150);
+                setTimeRemaining(remainingBatches * 15);
+              }
             }
           } catch (pollErr) {
             console.error('[EC8] Polling error:', pollErr);
@@ -412,12 +418,16 @@ export default function Home() {
           const update = JSON.parse(event.data);
           setProgress(update.progress ?? 0);
           setStats({ processed: update.processed ?? 0, skipped: update.skipped ?? 0 });
+          if (update.estimatedTimeRemainingSeconds !== undefined) {
+            setTimeRemaining(update.estimatedTimeRemainingSeconds);
+          }
 
           if (update.status === 'PROCESSING') {
             setStatusMessage(`Mapping leads dynamically... ${update.progress}%`);
           } else if (update.status === 'COMPLETED') {
             setStatusMessage('Import completed successfully!');
             setIsProcessing(false);
+            setTimeRemaining(null);
             sse.close();
             if (pollRef.current) {
               clearInterval(pollRef.current);
@@ -432,6 +442,7 @@ export default function Home() {
             setStatusMessage('Import failed.');
             setError(errMsg);
             setIsProcessing(false);
+            setTimeRemaining(null);
             sse.close();
             sseRef.current = null;
             if (pollRef.current) {
@@ -576,6 +587,7 @@ export default function Home() {
     setImportResult(null);
     setStats(null);
     setProgress(0);
+    setTimeRemaining(null);
     setError(null);
     setIsModalAnimating(false);
     setIsConfirming(false);
@@ -1175,7 +1187,14 @@ export default function Home() {
                     <div className="max-w-2xl mx-auto w-full bg-neutral-900/60 p-8 rounded-2xl border border-neutral-900/40 space-y-5 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)]">
                       {/* Top Header Row of Ingestion */}
                       <div className="flex justify-between items-center text-xs">
-                        <span className="font-semibold text-neutral-200 tracking-tight">{statusMessage}</span>
+                        <div className="flex flex-col gap-1">
+                          <span className="font-semibold text-neutral-200 tracking-tight">{statusMessage}</span>
+                          {timeRemaining !== null && timeRemaining > 0 && (
+                            <span className="text-[10px] text-teal-400 font-semibold">
+                              Est. remaining: {Math.floor(timeRemaining / 60) > 0 ? `${Math.floor(timeRemaining / 60)}m ${timeRemaining % 60}s` : `${timeRemaining}s`}
+                            </span>
+                          )}
+                        </div>
                         <span className="font-bold text-teal-400">{progress}%</span>
                       </div>
 
