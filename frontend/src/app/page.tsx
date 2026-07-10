@@ -979,7 +979,7 @@ export default function Home() {
                     </div>
                     <h4 className="text-sm font-bold text-neutral-200">Drop your CSV file here</h4>
                     <p className="text-[10px] text-neutral-500 mt-1 max-w-xs mx-auto leading-relaxed">
-                      Or click to browse local directories (max size 5MB).
+                      Or click to browse local directories (max size 100MB).
                     </p>
                   </div>
 
