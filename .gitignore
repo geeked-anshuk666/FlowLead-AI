@@ -26,4 +26,11 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 
+# Docs directory (local reference only, not pushed to main repo)
+docs/
+
+# Large synthetic test data files
+Sample Data/synthetic_leads_100k.csv
+Sample Data/synthetic_leads_100k_part_*.csv
+
 
