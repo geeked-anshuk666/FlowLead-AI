@@ -96,6 +96,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [isUploading, setIsUploading] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sseRef = useRef<EventSource | null>(null);
@@ -194,6 +195,7 @@ export default function Home() {
     setImportResult(null);
     setStats(null);
     setProgress(0);
+    setIsUploading(true);
 
     const formData = new FormData();
     formData.append('file', targetFile);
@@ -215,6 +217,8 @@ export default function Home() {
     } catch (err: any) {
       setError(err.message || 'An error occurred during file parsing.');
       setFile(null);
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -955,33 +959,44 @@ export default function Home() {
               {importStep === 1 && (
                 <div className="p-8 h-full flex flex-col justify-center space-y-6">
                   <div
-                    onDragEnter={handleDrag}
-                    onDragOver={handleDrag}
-                    onDragLeave={handleDrag}
-                    onDrop={handleDrop}
-                    onClick={() => fileInputRef.current?.click()}
-                    className={`border-2 border-dashed rounded-2xl p-16 text-center cursor-pointer transition-all duration-300 relative overflow-hidden group max-w-xl mx-auto w-full ${dragActive
-                        ? 'border-teal-500 bg-teal-950/10 shadow-lg shadow-teal-500/5'
-                        : 'border-neutral-800 hover:border-neutral-700 bg-neutral-900/10'
-                      }`}
+                    onDragEnter={!isUploading ? handleDrag : undefined}
+                    onDragOver={!isUploading ? handleDrag : undefined}
+                    onDragLeave={!isUploading ? handleDrag : undefined}
+                    onDrop={!isUploading ? handleDrop : undefined}
+                    onClick={!isUploading ? () => fileInputRef.current?.click() : undefined}
+                    className={`border-2 border-dashed rounded-2xl p-16 text-center transition-all duration-300 relative overflow-hidden group max-w-xl mx-auto w-full ${isUploading
+                        ? 'cursor-not-allowed border-neutral-800 bg-neutral-900/5'
+                        : 'cursor-pointer border-neutral-800 hover:border-neutral-700 bg-neutral-900/10'
+                      } ${dragActive ? 'border-teal-500 bg-teal-950/10 shadow-lg shadow-teal-500/5' : ''}`}
                   >
-                    <label htmlFor="modal-csv-input" className="sr-only">Upload CSV File</label>
-                    <input
-                      type="file"
-                      id="modal-csv-input"
-                      ref={fileInputRef}
-                      onChange={handleFileChange}
-                      className="hidden"
-                      accept=".csv"
-                    />
-                    <div className="w-12 h-12 bg-neutral-950 rounded-xl flex items-center justify-center mx-auto mb-4 border border-neutral-800">
-                      <Upload className="w-5 h-5 text-neutral-400 group-hover:text-teal-400 transition-colors" />
-                    </div>
-                    <h4 className="text-sm font-bold text-neutral-200">Drop your CSV file here</h4>
-                    <p className="text-[10px] text-neutral-500 mt-1 max-w-xs mx-auto leading-relaxed">
-                      Or click to browse local directories (max size 100MB).
-                    </p>
+                    {isUploading ? (
+                      <div className="flex flex-col items-center justify-center space-y-4 py-4">
+                        <div className="w-10 h-10 border-4 border-teal-500/30 border-t-teal-400 rounded-full animate-spin"></div>
+                        <h4 className="text-sm font-bold text-teal-400 tracking-tight animate-pulse">Uploading and parsing CSV file...</h4>
+                        <p className="text-[10px] text-neutral-500">This may take a few seconds for larger datasets.</p>
+                      </div>
+                    ) : (
+                      <>
+                        <label htmlFor="modal-csv-input" className="sr-only">Upload CSV File</label>
+                        <input
+                          type="file"
+                          id="modal-csv-input"
+                          ref={fileInputRef}
+                          onChange={handleFileChange}
+                          className="hidden"
+                          accept=".csv"
+                        />
+                        <div className="w-12 h-12 bg-neutral-950 rounded-xl flex items-center justify-center mx-auto mb-4 border border-neutral-800">
+                          <Upload className="w-5 h-5 text-neutral-400 group-hover:text-teal-400 transition-colors" />
+                        </div>
+                        <h4 className="text-sm font-bold text-neutral-200">Drop your CSV file here</h4>
+                        <p className="text-[10px] text-neutral-500 mt-1 max-w-xs mx-auto leading-relaxed">
+                          Or click to browse local directories (max size 100MB).
+                        </p>
+                      </>
+                    )}
                   </div>
+
 
                   <div className="bg-neutral-950/40 p-5 rounded-xl border border-neutral-900/30 max-w-xl mx-auto w-full">
                     <h5 className="text-[10px] uppercase tracking-wider font-bold text-neutral-400 mb-2">Required Headers</h5>
