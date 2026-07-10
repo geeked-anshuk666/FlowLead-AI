@@ -40,6 +40,9 @@ export default function Home() {
   const [isModalAnimating, setIsModalAnimating] = useState(false);
   // EC5 frontend: prevent double-clicking "Import X Leads" button
   const [isConfirming, setIsConfirming] = useState(false);
+  // Tracks a permanent confirm failure — once set, the Import button stays disabled
+  // until the user cancels and re-uploads. Prevents the 409 re-confirm loop.
+  const [confirmFailed, setConfirmFailed] = useState(false);
 
   // Shared confirmation dialog for both delete contexts
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -290,6 +293,9 @@ export default function Home() {
     if (!uploadData) return;
     // EC5 frontend guard: prevent double-click / re-entry
     if (isConfirming) return;
+    // Permanent failure guard: once a confirm fails the runId is gone from backend memory.
+    // Re-attempting the same runId would yield 404/409. Force user to re-upload.
+    if (confirmFailed) return;
 
     setIsConfirming(true);
     setError(null);
@@ -307,7 +313,14 @@ export default function Home() {
 
       if (!confirmRes.ok) {
         const errData = await confirmRes.json();
-        throw new Error(errData.error || 'Failed to confirm import.');
+        // Mark as permanently failed: same runId cannot be re-confirmed.
+        // The backend already consumed or rejected this run's pending state.
+        setConfirmFailed(true);
+        setIsProcessing(false);
+        // Release the confirming lock so UI updates, but button stays disabled via confirmFailed.
+        setIsConfirming(false);
+        setError(errData.error || 'Failed to confirm import. Please cancel and re-upload your file.');
+        return;
       }
 
       // If user pruned all rows to 0, skip to a completed state immediately
@@ -445,10 +458,14 @@ export default function Home() {
         }
       };
     } catch (err: any) {
-      setError(err.message || 'Failed to start import pipeline.');
+      // Unexpected errors (network down, JSON parse, etc.) — let user retry
+      setError(err.message || 'Failed to start import pipeline. Please try again.');
       setIsProcessing(false);
-    } finally {
       setIsConfirming(false);
+    } finally {
+      // Note: isConfirming is released explicitly in the success/failure branches above
+      // to give us precise control. The catch above handles the unexpected path.
+      // We do NOT unconditionally release here to avoid re-enabling after confirmFailed.
     }
   };
 
@@ -562,6 +579,7 @@ export default function Home() {
     setError(null);
     setIsModalAnimating(false);
     setIsConfirming(false);
+    setConfirmFailed(false);
     setImportStep(1);
     // EC8: Clean up any active polling interval on modal close
     if (pollRef.current) {
@@ -1082,6 +1100,16 @@ export default function Home() {
               {/* Step 2: Zebra Table Preview with Red Delete button */}
               {importStep === 2 && uploadData && (
                 <div className="h-full flex flex-col p-8 space-y-4">
+                  {/* Inline error banner shown when confirm fails — button stays locked */}
+                  {confirmFailed && error && (
+                    <div className="bg-red-950/20 border border-red-900/30 p-4 rounded-xl flex items-center gap-3 shrink-0">
+                      <XCircle className="w-4 h-4 text-red-400 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-red-400">Import Failed</p>
+                        <p className="text-[11px] text-red-300/70 mt-0.5 leading-relaxed">{error} — Please <strong>Cancel</strong> and re-upload your file to try again.</p>
+                      </div>
+                    </div>
+                  )}
                   <div className="relative w-full max-w-xs shrink-0">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500" />
                     <input
@@ -1244,10 +1272,11 @@ export default function Home() {
                 {importStep === 2 && uploadData && (
                   <button
                     onClick={startImportPipeline}
-                    disabled={isModalAnimating || isConfirming}
+                    disabled={isModalAnimating || isConfirming || confirmFailed}
                     className="px-5 py-2.5 bg-neutral-100 hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed text-neutral-950 text-xs font-bold rounded-xl shadow-lg transition-all duration-300"
+                    title={confirmFailed ? 'Import failed — cancel and re-upload to try again' : undefined}
                   >
-                    {isConfirming ? 'Submitting...' : `Import ${uploadData.validCount.toLocaleString()} Leads`}
+                    {isConfirming ? 'Submitting...' : confirmFailed ? 'Import Failed' : `Import ${uploadData.validCount.toLocaleString()} Leads`}
                   </button>
                 )}
                 {importStep === 3 && !isProcessing && (
