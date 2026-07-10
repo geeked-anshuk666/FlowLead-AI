@@ -958,6 +958,12 @@ export default function Home() {
               {/* Step 1: Upload Dropzone */}
               {importStep === 1 && (
                 <div className="p-8 h-full flex flex-col justify-center space-y-6">
+                  {error && (
+                    <div className="bg-red-950/20 border border-red-900/30 p-4 rounded-xl flex items-center gap-3 max-w-xl mx-auto w-full">
+                      <XCircle className="w-4 h-4 text-red-400 shrink-0" />
+                      <p className="text-xs text-red-400 font-medium">{error}</p>
+                    </div>
+                  )}
                   <div
                     onDragEnter={!isUploading ? handleDrag : undefined}
                     onDragOver={!isUploading ? handleDrag : undefined}
