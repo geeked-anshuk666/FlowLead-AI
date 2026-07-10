@@ -6,6 +6,42 @@ Built as a full-stack TypeScript application with Next.js on the frontend, Expre
 
 ---
 
+
+# Table of Contents
+
+* [GrowEasy AI CSV Lead Importer](#groweasy-ai-csv-lead-importer)
+* [Demo](#demo)
+* [How it works](#how-it-works)
+* [Architecture](#architecture)
+    * [Cold Start Handling](#cold-start-handling)
+    * [Upload + Confirm Flow](#upload--confirm-flow)
+    * [Queue and Worker](#queue-and-worker)
+    * [AI Mapping and Fallback Chain](#ai-mapping-and-fallback-chain)
+    * [Intelligent Upsert](#intelligent-upsert)
+* [Features](#features)
+* [Tech Stack](#tech-stack)
+* [Database Schema](#database-schema)
+    * [ImportRun](#importrun)
+    * [Lead](#lead)
+* [API Reference](#api-reference)
+* [Local Setup](#local-setup)
+    * [Prerequisites](#prerequisites)
+    * [1. Clone the repository](#1-clone-the-repository)
+    * [2. Configure the backend environment](#2-configure-the-backend-environment)
+    * [3. Start the database and Redis](#3-start-the-database-and-redis)
+    * [4. Install dependencies and run migrations](#4-install-dependencies-and-run-migrations)
+    * [5. Build and start the backend](#5-build-and-start-the-backend)
+    * [6. Start the frontend](#6-start-the-frontend)
+    * [Running everything with Docker Compose](#running-everything-with-docker-compose)
+* [Deployment](#deployment)
+    * [Backend - Render](#backend---render)
+    * [Frontend - Vercel](#frontend---vercel)
+    * [Database - Neon](#database---neon)
+* [Sample Data](#sample-data)
+* [Edge Cases Handled](#edge-cases-handled)
+
+---
+
 ## Demo
 
 | Service | URL |
