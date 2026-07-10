@@ -7,10 +7,10 @@ import { LeadService } from './services/lead.service.js';
 
 const app = express();
 
-// Secure file size upload limits to protect server memory (25MB is more than enough for 100K+ leads)
+// Secure file size upload limits to protect server memory (100MB to support massive 100K+ load tests)
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024 }
+  limits: { fileSize: 100 * 1024 * 1024 }
 });
 
 // Configure API Rate Limiting to prevent DoS attacks / resource exhaustion
