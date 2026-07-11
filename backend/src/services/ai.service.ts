@@ -20,31 +20,41 @@ export class AiService {
   private static geminiKey = process.env.GEMINI_API_KEY || '';
   private static openrouterKey = process.env.OPENROUTER_API_KEY || '';
 
-  /**
-   * Intelligently maps a batch of raw CSV rows to GrowEasy CRM Lead format.
-   */
-  public static async mapLeadsBatch(rawRows: any[]): Promise<any[]> {
+  public static async mapLeadsBatch(
+    rawRows: any[],
+    onModelAttempt?: (modelName: string, status: 'attempt' | 'success' | 'failure', errorMsg?: string) => void
+  ): Promise<{ leads: any[]; modelUsed: string }> {
     const prompt = this.buildPrompt(rawRows);
 
     // Try Google Gemini directly first
     if (this.geminiKey) {
+      const modelName = 'google/gemini-2.5-flash';
+      if (onModelAttempt) onModelAttempt(modelName, 'attempt');
       try {
-        console.log('Attempting AI mapping via Google Gemini API...');
-        return await this.callGemini(prompt);
-      } catch (err) {
-        console.warn('Gemini API call failed, falling back to OpenRouter...', err);
+        console.log(`Attempting AI mapping via Google Gemini API...`);
+        const leads = await this.callGemini(prompt);
+        if (onModelAttempt) onModelAttempt(modelName, 'success');
+        return { leads, modelUsed: modelName };
+      } catch (err: any) {
+        const errMsg = err?.message || String(err);
+        console.warn('Gemini API call failed, falling back to OpenRouter...', errMsg);
+        if (onModelAttempt) onModelAttempt(modelName, 'failure', errMsg);
       }
     }
 
     // Fallback to OpenRouter cascading model list
     if (this.openrouterKey) {
       for (const model of OPENROUTER_MODELS) {
+        if (onModelAttempt) onModelAttempt(model, 'attempt');
         try {
           console.log(`Attempting AI mapping via OpenRouter model: ${model}...`);
-          return await this.callOpenRouter(prompt, model);
+          const leads = await this.callOpenRouter(prompt, model);
+          if (onModelAttempt) onModelAttempt(model, 'success');
+          return { leads, modelUsed: model };
         } catch (err: any) {
           const errMsg = err?.message || String(err);
           console.warn(`OpenRouter model ${model} failed. Trying next fallback...`, errMsg);
+          if (onModelAttempt) onModelAttempt(model, 'failure', errMsg);
           if (errMsg.includes('429')) {
             console.log('Throttling OpenRouter next fallback attempt by 4s to avoid request limits...');
             await new Promise(r => setTimeout(r, 4000));

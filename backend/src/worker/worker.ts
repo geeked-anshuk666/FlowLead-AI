@@ -68,7 +68,18 @@ async function startWorker() {
             
             while (retriesLeft >= 0) {
               try {
-                mappedLeads = await AiService.mapLeadsBatch(batch);
+                const res = await AiService.mapLeadsBatch(batch, async (modelName, status, errorMsg) => {
+                  await QueueService.publish(
+                    `import_progress:${runId}`,
+                    JSON.stringify({
+                      status: 'MODEL_LOG',
+                      model: modelName,
+                      modelStatus: status,
+                      error: errorMsg
+                    })
+                  );
+                });
+                mappedLeads = res.leads;
                 break; // Success!
               } catch (err: any) {
                 const errMsg = err?.message || String(err);

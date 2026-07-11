@@ -85,6 +85,7 @@ export default function Home() {
   const [statusMessage, setStatusMessage] = useState('');
   const [stats, setStats] = useState<{ processed: number; skipped: number } | null>(null);
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
+  const [modelLogs, setModelLogs] = useState<{ id: string; model: string; status: 'attempt' | 'success' | 'failure'; error?: string }[]>([]);
 
   // Final Results
   const [importResult, setImportResult] = useState<{
@@ -420,6 +421,26 @@ export default function Home() {
       sse.onmessage = (event) => {
         try {
           const update = JSON.parse(event.data);
+          if (update.status === 'MODEL_LOG') {
+            setModelLogs((prev) => {
+              // Ensure we don't duplicate identical logs (e.g. repeated retries of same attempt/success/fail)
+              const isDup = prev.some(
+                (log) => log.model === update.model && log.status === update.modelStatus
+              );
+              if (isDup) return prev;
+              return [
+                ...prev,
+                {
+                  id: Math.random().toString(),
+                  model: update.model,
+                  status: update.modelStatus,
+                  error: update.error
+                }
+              ];
+            });
+            return; // Don't proceed to general progress rendering for log events
+          }
+
           setProgress(update.progress ?? 0);
           setStats({ processed: update.processed ?? 0, skipped: update.skipped ?? 0 });
           if (update.estimatedTimeRemainingSeconds !== undefined) {
@@ -592,6 +613,7 @@ export default function Home() {
     setStats(null);
     setProgress(0);
     setTimeRemaining(null);
+    setModelLogs([]);
     setError(null);
     setIsModalAnimating(false);
     setIsConfirming(false);
@@ -1218,6 +1240,24 @@ export default function Home() {
                           <span>100%</span>
                         </div>
                       )}
+
+                      {/* Active Model Logging Terminal */}
+                      {modelLogs.length > 0 && (
+                        <div className="bg-neutral-950 p-4 rounded-xl border border-neutral-900/60 font-mono text-[10px] space-y-1.5 max-h-28 overflow-y-auto text-left shadow-inner">
+                          {modelLogs.map((log) => (
+                            <div key={log.id} className="flex items-start gap-2 leading-relaxed">
+                              {log.status === 'attempt' && <span className="text-blue-400 font-bold shrink-0">➜ [TRY]</span>}
+                              {log.status === 'success' && <span className="text-emerald-400 font-bold shrink-0">✓ [OK]</span>}
+                              {log.status === 'failure' && <span className="text-red-400 font-bold shrink-0">✗ [FAIL]</span>}
+                              <span className="flex-1 text-neutral-400 truncate">
+                                {log.status === 'attempt' && `Attempting AI mapping via: ${log.model}...`}
+                                {log.status === 'success' && `Successfully mapped via: ${log.model}`}
+                                {log.status === 'failure' && `Failed ${log.model}: ${log.error || 'Quota exhausted'}`}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ) : error ? (
                     /* EC10: Show error state when import fails (e.g., AI quota exhausted) */
@@ -1239,6 +1279,24 @@ export default function Home() {
                             <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider block">Skipped / Failed</span>
                             <span className="text-lg font-bold text-red-400 mt-1 block">{stats.skipped}</span>
                           </div>
+                        </div>
+                      )}
+                      
+                      {/* Active Model Logging Terminal during failure */}
+                      {modelLogs.length > 0 && (
+                        <div className="bg-neutral-950 p-4 rounded-xl border border-neutral-900/60 font-mono text-[10px] space-y-1.5 max-h-28 overflow-y-auto text-left shadow-inner">
+                          {modelLogs.map((log) => (
+                            <div key={log.id} className="flex items-start gap-2 leading-relaxed">
+                              {log.status === 'attempt' && <span className="text-blue-400 font-bold shrink-0">➜ [TRY]</span>}
+                              {log.status === 'success' && <span className="text-emerald-400 font-bold shrink-0">✓ [OK]</span>}
+                              {log.status === 'failure' && <span className="text-red-400 font-bold shrink-0">✗ [FAIL]</span>}
+                              <span className="flex-1 text-neutral-400 truncate">
+                                {log.status === 'attempt' && `Attempting AI mapping via: ${log.model}...`}
+                                {log.status === 'success' && `Successfully mapped via: ${log.model}`}
+                                {log.status === 'failure' && `Failed ${log.model}: ${log.error || 'Quota exhausted'}`}
+                              </span>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
