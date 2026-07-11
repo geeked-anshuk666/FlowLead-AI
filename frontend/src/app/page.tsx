@@ -85,7 +85,7 @@ export default function Home() {
   const [statusMessage, setStatusMessage] = useState('');
   const [stats, setStats] = useState<{ processed: number; skipped: number } | null>(null);
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
-  const [modelLogs, setModelLogs] = useState<{ id: string; model: string; status: 'attempt' | 'success' | 'failure'; error?: string }[]>([]);
+  const [activeModelMessage, setActiveModelMessage] = useState<string>('');
 
   // Final Results
   const [importResult, setImportResult] = useState<{
@@ -422,22 +422,20 @@ export default function Home() {
         try {
           const update = JSON.parse(event.data);
           if (update.status === 'MODEL_LOG') {
-            setModelLogs((prev) => {
-              // Ensure we don't duplicate identical logs (e.g. repeated retries of same attempt/success/fail)
-              const isDup = prev.some(
-                (log) => log.model === update.model && log.status === update.modelStatus
-              );
-              if (isDup) return prev;
-              return [
-                ...prev,
-                {
-                  id: Math.random().toString(),
-                  model: update.model,
-                  status: update.modelStatus,
-                  error: update.error
-                }
-              ];
-            });
+            const friendlyName = update.model
+              .replace('meta-llama/llama-3.3-70b-instruct:free', 'Llama 3.3 (Free)')
+              .replace('meta-llama/llama-3.2-3b-instruct:free', 'Llama 3.2 (Free)')
+              .replace('nousresearch/hermes-3-405b:free', 'Hermes 3 (Free)')
+              .replace('google/gemma-2-9b-it:free', 'Gemma 2 (Free)')
+              .replace('google/gemini-2.5-flash', 'Gemini 2.5 Flash');
+
+            if (update.modelStatus === 'attempt') {
+              setActiveModelMessage(`➜ Attempting AI mapping via: ${friendlyName}...`);
+            } else if (update.modelStatus === 'success') {
+              setActiveModelMessage(`✓ Successfully mapped batch via: ${friendlyName}`);
+            } else if (update.modelStatus === 'failure') {
+              setActiveModelMessage(`✗ Failed ${friendlyName} - trying fallback model...`);
+            }
             return; // Don't proceed to general progress rendering for log events
           }
 
@@ -613,7 +611,7 @@ export default function Home() {
     setStats(null);
     setProgress(0);
     setTimeRemaining(null);
-    setModelLogs([]);
+    setActiveModelMessage('');
     setError(null);
     setIsModalAnimating(false);
     setIsConfirming(false);
@@ -1241,21 +1239,11 @@ export default function Home() {
                         </div>
                       )}
 
-                      {/* Active Model Logging Terminal */}
-                      {modelLogs.length > 0 && (
-                        <div className="bg-neutral-950 p-4 rounded-xl border border-neutral-900/60 font-mono text-[10px] space-y-1.5 max-h-28 overflow-y-auto text-left shadow-inner">
-                          {modelLogs.map((log) => (
-                            <div key={log.id} className="flex items-start gap-2 leading-relaxed">
-                              {log.status === 'attempt' && <span className="text-blue-400 font-bold shrink-0">➜ [TRY]</span>}
-                              {log.status === 'success' && <span className="text-emerald-400 font-bold shrink-0">✓ [OK]</span>}
-                              {log.status === 'failure' && <span className="text-red-400 font-bold shrink-0">✗ [FAIL]</span>}
-                              <span className="flex-1 text-neutral-400 truncate">
-                                {log.status === 'attempt' && `Attempting AI mapping via: ${log.model}...`}
-                                {log.status === 'success' && `Successfully mapped via: ${log.model}`}
-                                {log.status === 'failure' && `Failed ${log.model}: ${log.error || 'Quota exhausted'}`}
-                              </span>
-                            </div>
-                          ))}
+                      {/* Single Active Model Status Bar */}
+                      {activeModelMessage && (
+                        <div className="bg-neutral-950/80 px-4 py-2.5 rounded-xl border border-neutral-900/60 font-mono text-[10px] text-neutral-400 text-left shadow-sm flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse shrink-0"></span>
+                          <span className="truncate">{activeModelMessage}</span>
                         </div>
                       )}
                     </div>
@@ -1282,21 +1270,11 @@ export default function Home() {
                         </div>
                       )}
                       
-                      {/* Active Model Logging Terminal during failure */}
-                      {modelLogs.length > 0 && (
-                        <div className="bg-neutral-950 p-4 rounded-xl border border-neutral-900/60 font-mono text-[10px] space-y-1.5 max-h-28 overflow-y-auto text-left shadow-inner">
-                          {modelLogs.map((log) => (
-                            <div key={log.id} className="flex items-start gap-2 leading-relaxed">
-                              {log.status === 'attempt' && <span className="text-blue-400 font-bold shrink-0">➜ [TRY]</span>}
-                              {log.status === 'success' && <span className="text-emerald-400 font-bold shrink-0">✓ [OK]</span>}
-                              {log.status === 'failure' && <span className="text-red-400 font-bold shrink-0">✗ [FAIL]</span>}
-                              <span className="flex-1 text-neutral-400 truncate">
-                                {log.status === 'attempt' && `Attempting AI mapping via: ${log.model}...`}
-                                {log.status === 'success' && `Successfully mapped via: ${log.model}`}
-                                {log.status === 'failure' && `Failed ${log.model}: ${log.error || 'Quota exhausted'}`}
-                              </span>
-                            </div>
-                          ))}
+                      {/* Final Active Model Status during failure */}
+                      {activeModelMessage && (
+                        <div className="bg-neutral-950/80 px-4 py-2.5 rounded-xl border border-neutral-900/60 font-mono text-[10px] text-neutral-400 text-left shadow-sm flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"></span>
+                          <span className="truncate">{activeModelMessage}</span>
                         </div>
                       )}
                     </div>

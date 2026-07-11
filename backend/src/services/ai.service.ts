@@ -63,7 +63,107 @@ export class AiService {
       }
     }
 
-    throw new Error('All AI Mapping services exhausted or unavailable.');
+    // P0 Fallback: Local Deterministic Rule-Based Heuristic Mapper
+    const localModelName = 'GrowEasy Local Rule-Based Mapper';
+    if (onModelAttempt) onModelAttempt(localModelName, 'attempt');
+    console.warn('All AI models exhausted. Falling back to local rule-based mapper.');
+    const leads = this.mapLeadsLocally(rawRows);
+    if (onModelAttempt) onModelAttempt(localModelName, 'success');
+    return { leads, modelUsed: localModelName };
+  }
+
+  private static mapLeadsLocally(rawRows: any[]): any[] {
+    const mapped: any[] = [];
+
+    for (const row of rawRows) {
+      // Find keys in the row case-insensitively
+      const findVal = (patterns: string[]): string | null => {
+        for (const pattern of patterns) {
+          const key = Object.keys(row).find(k => k.toLowerCase().replace(/[^a-z0-9]/g, '').includes(pattern));
+          if (key && row[key]) return String(row[key]).trim();
+        }
+        return null;
+      };
+
+      const email = findVal(['email', 'mail']);
+      const phone = findVal(['phone', 'mobile', 'num', 'contact']);
+
+      // Guard: must have either email or phone
+      if (!email && !phone) continue;
+
+      // Extract country code if present (e.g. +91 9999999999)
+      let countryCode = '+91';
+      let cleanPhone = phone || '';
+      if (cleanPhone.startsWith('+')) {
+        const parts = cleanPhone.split(/\s+/);
+        if (parts[0] && parts[0].length <= 4) {
+          countryCode = parts[0];
+          cleanPhone = parts.slice(1).join('');
+        }
+      }
+      cleanPhone = cleanPhone.replace(/[^0-9]/g, '');
+
+      // Parse status
+      let crmStatus = 'GOOD_LEAD_FOLLOW_UP';
+      const rawStatus = findVal(['status', 'stage']);
+      if (rawStatus) {
+        const norm = rawStatus.toUpperCase().replace(/[^A-Z]/g, '');
+        if (norm.includes('SALE') || norm.includes('DONE')) crmStatus = 'SALE_DONE';
+        else if (norm.includes('BAD') || norm.includes('JUNK')) crmStatus = 'BAD_LEAD';
+        else if (norm.includes('NOTCONNECT') || norm.includes('NOANSWER')) crmStatus = 'DID_NOT_CONNECT';
+      }
+
+      // Parse data source
+      let dataSource = 'leads_on_demand';
+      const rawSource = findVal(['source']);
+      if (rawSource) {
+        const norm = rawSource.toLowerCase();
+        for (const ds of ALLOWED_DATA_SOURCES) {
+          if (norm.includes(ds.replace(/_/g, '')) || ds.replace(/_/g, '').includes(norm)) {
+            dataSource = ds;
+            break;
+          }
+        }
+      }
+
+      // Format notes from leftover unmapped columns
+      const leftoverNotes: string[] = [];
+      for (const [key, val] of Object.entries(row)) {
+        const lowerKey = key.toLowerCase();
+        if (
+          !lowerKey.includes('name') &&
+          !lowerKey.includes('email') &&
+          !lowerKey.includes('phone') &&
+          !lowerKey.includes('mobile') &&
+          !lowerKey.includes('city') &&
+          !lowerKey.includes('state') &&
+          !lowerKey.includes('country') &&
+          !lowerKey.includes('company')
+        ) {
+          leftoverNotes.push(`${key}: ${val}`);
+        }
+      }
+
+      mapped.push({
+        name: findVal(['name', 'firstname', 'lastname', 'owner', 'contactperson']) || 'Unknown Lead',
+        email: email,
+        country_code: countryCode,
+        mobile_without_country_code: cleanPhone,
+        company: findVal(['company', 'firm', 'org']),
+        city: findVal(['city', 'town']),
+        state: findVal(['state', 'region']),
+        country: findVal(['country']) || 'India',
+        lead_owner: findVal(['owner', 'assignee']) || 'agent@groweasy.ai',
+        crm_status: crmStatus,
+        crm_note: leftoverNotes.join('; ').substring(0, 1000),
+        data_source: dataSource,
+        possession_time: findVal(['possession', 'time']),
+        description: findVal(['description', 'remarks', 'note']),
+        created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
+      });
+    }
+
+    return mapped;
   }
 
   private static async callGemini(prompt: string): Promise<any[]> {
@@ -159,11 +259,26 @@ ${JSON.stringify(rawRows, null, 2)}
 
   private static parseJsonResponse(text: string): any[] {
     // Strip markdown formatting if the model ignored instructions
-    const cleanText = text.replace(/```json/gi, '').replace(/```/g, '').trim();
-    const parsed = JSON.parse(cleanText);
-    if (!parsed || !Array.isArray(parsed.leads)) {
-      throw new Error('Invalid response structure from AI model');
+    let cleanText = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+    try {
+      const parsed = JSON.parse(cleanText);
+      if (parsed && Array.isArray(parsed.leads)) return parsed.leads;
+    } catch (err) {
+      console.warn('Standard JSON parse failed. Attempting regex extraction...', err);
     }
-    return parsed.leads;
+
+    // Robust Fallback: extract the JSON array of leads using regex patterns
+    const arrayMatch = cleanText.match(/\[\s*\{[\s\S]*\}\s*\]/);
+    if (arrayMatch) {
+      try {
+        const parsedArray = JSON.parse(arrayMatch[0]);
+        if (Array.isArray(parsedArray)) return parsedArray;
+      } catch (e) {
+        console.error('Regex extraction JSON parse failed:', e);
+      }
+    }
+
+    throw new Error('Invalid response structure from AI model');
   }
 }
