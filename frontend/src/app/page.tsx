@@ -340,6 +340,10 @@ export default function Home() {
         return;
       }
 
+      // Set initial estimated time remaining (50 row batch size, ~7.5s per batch including throttling + API latency)
+      const initialRemaining = Math.ceil(uploadData.validCount / 50) * 7.5;
+      setTimeRemaining(Math.round(initialRemaining));
+
       // Transition to step 3 with animation, then subscribe to SSE
       setIsModalAnimating(true);
       setTimeout(() => {
@@ -400,8 +404,8 @@ export default function Home() {
               });
               // Simple poll estimation
               if (data.totalRecords) {
-                const remainingBatches = Math.ceil((data.totalRecords - done) / 150);
-                setTimeRemaining(remainingBatches * 15);
+                const remainingBatches = Math.ceil((data.totalRecords - done) / 50);
+                setTimeRemaining(Math.round(remainingBatches * 7.5));
               }
             }
           } catch (pollErr) {

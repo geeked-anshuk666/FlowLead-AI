@@ -7,6 +7,7 @@ import { LeadService } from './services/lead.service.js';
 import { prisma } from './config/db.js';
 
 const app = express();
+app.set('trust proxy', 1);
 
 // Secure file size upload limits to protect server memory (100MB to support massive 100K+ load tests)
 const upload = multer({

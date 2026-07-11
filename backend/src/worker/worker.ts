@@ -8,9 +8,10 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // Each AI call handles up to BATCH_SIZE rows.
-// PARALLEL_BATCHES batches are fired concurrently to maximise free-tier throughput.
-const BATCH_SIZE = 150;
-const PARALLEL_BATCHES = 3;
+// For the Gemini free tier, we set BATCH_SIZE to 50 and process sequentially (PARALLEL_BATCHES = 1)
+// with a 5-second delay to completely avoid the 250,000 tokens-per-minute input quota limit.
+const BATCH_SIZE = 50;
+const PARALLEL_BATCHES = 1;
 
 async function startWorker() {
   await connectDb();
@@ -44,7 +45,7 @@ async function startWorker() {
       }
 
       const totalGroups = Math.ceil(batchStarts.length / PARALLEL_BATCHES);
-      const targetGroupDurationMs = 15000; // 15 seconds target per group of 3 calls (~12 RPM rate limit safety)
+      const targetGroupDurationMs = 5000; // 5 seconds target per call (~12 RPM safety)
 
       // Process PARALLEL_BATCHES batches at a time.
       for (let g = 0; g < batchStarts.length; g += PARALLEL_BATCHES) {
