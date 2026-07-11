@@ -31,6 +31,7 @@ async function startWorker() {
       let processedCount = 0;
       let totalSkipped = 0;
       let aiExhausted = false;
+      let preferredModel: string | undefined = undefined;
 
       // For very small files use smaller batches so progress feels responsive.
       // For larger files use full BATCH_SIZE to minimise the number of AI round-trips.
@@ -54,7 +55,11 @@ async function startWorker() {
         const groupStartTime = Date.now();
         const currentGroupIndex = g / PARALLEL_BATCHES;
         const remainingGroups = totalGroups - (currentGroupIndex + 1);
-        const estimatedTimeRemainingSeconds = remainingGroups * (targetGroupDurationMs / 1000);
+        
+        // If local mapper is active, there are no API calls, so remaining duration is virtually 0
+        const estimatedTimeRemainingSeconds = preferredModel === 'GrowEasy Local Rule-Based Mapper'
+          ? 0
+          : remainingGroups * (targetGroupDurationMs / 1000);
 
         const group = batchStarts.slice(g, g + PARALLEL_BATCHES);
 
@@ -68,18 +73,23 @@ async function startWorker() {
             
             while (retriesLeft >= 0) {
               try {
-                const res = await AiService.mapLeadsBatch(batch, async (modelName, status, errorMsg) => {
-                  await QueueService.publish(
-                    `import_progress:${runId}`,
-                    JSON.stringify({
-                      status: 'MODEL_LOG',
-                      model: modelName,
-                      modelStatus: status,
-                      error: errorMsg
-                    })
-                  );
-                });
+                const res = await AiService.mapLeadsBatch(
+                  batch,
+                  async (modelName, status, errorMsg) => {
+                    await QueueService.publish(
+                      `import_progress:${runId}`,
+                      JSON.stringify({
+                        status: 'MODEL_LOG',
+                        model: modelName,
+                        modelStatus: status,
+                        error: errorMsg
+                      })
+                    );
+                  },
+                  preferredModel
+                );
                 mappedLeads = res.leads;
+                preferredModel = res.modelUsed; // Make model sticky for subsequent batches
                 break; // Success!
               } catch (err: any) {
                 const errMsg = err?.message || String(err);
@@ -180,10 +190,11 @@ async function startWorker() {
           })
         );
 
-        // Throttling safety: ensure this group took at least targetGroupDurationMs to respect RPM limits
+        // Throttling safety: only sleep if we aren't using the local rule-based mapper
         const groupDuration = Date.now() - groupStartTime;
-        if (groupDuration < targetGroupDurationMs && g + PARALLEL_BATCHES < batchStarts.length) {
-          const sleepDuration = targetGroupDurationMs - groupDuration;
+        const targetDuration = preferredModel === 'GrowEasy Local Rule-Based Mapper' ? 0 : targetGroupDurationMs;
+        if (groupDuration < targetDuration && g + PARALLEL_BATCHES < batchStarts.length) {
+          const sleepDuration = targetDuration - groupDuration;
           console.log(`Group completed quickly (${Math.round(groupDuration/1000)}s). Throttling for ${Math.round(sleepDuration/1000)}s to respect rate limits...`);
           await sleep(sleepDuration);
         }

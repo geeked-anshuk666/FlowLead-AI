@@ -22,12 +22,22 @@ export class AiService {
 
   public static async mapLeadsBatch(
     rawRows: any[],
-    onModelAttempt?: (modelName: string, status: 'attempt' | 'success' | 'failure', errorMsg?: string) => void
+    onModelAttempt?: (modelName: string, status: 'attempt' | 'success' | 'failure', errorMsg?: string) => void,
+    preferredModel?: string
   ): Promise<{ leads: any[]; modelUsed: string }> {
+    // Stick to local mapper immediately if previous batch triggered it
+    const localModelName = 'GrowEasy Local Rule-Based Mapper';
+    if (preferredModel === localModelName) {
+      if (onModelAttempt) onModelAttempt(localModelName, 'attempt');
+      const leads = this.mapLeadsLocally(rawRows);
+      if (onModelAttempt) onModelAttempt(localModelName, 'success');
+      return { leads, modelUsed: localModelName };
+    }
+
     const prompt = this.buildPrompt(rawRows);
 
     // Try Google Gemini directly first
-    if (this.geminiKey) {
+    if (this.geminiKey && (!preferredModel || preferredModel === 'google/gemini-2.5-flash')) {
       const modelName = 'google/gemini-2.5-flash';
       if (onModelAttempt) onModelAttempt(modelName, 'attempt');
       try {
@@ -44,7 +54,14 @@ export class AiService {
 
     // Fallback to OpenRouter cascading model list
     if (this.openrouterKey) {
-      for (const model of OPENROUTER_MODELS) {
+      // Find the slice of models starting from preferredModel if set (to avoid repeating known failed models)
+      let modelsToTry = OPENROUTER_MODELS;
+      if (preferredModel && OPENROUTER_MODELS.includes(preferredModel)) {
+        const idx = OPENROUTER_MODELS.indexOf(preferredModel);
+        modelsToTry = OPENROUTER_MODELS.slice(idx);
+      }
+
+      for (const model of modelsToTry) {
         if (onModelAttempt) onModelAttempt(model, 'attempt');
         try {
           console.log(`Attempting AI mapping via OpenRouter model: ${model}...`);
@@ -64,7 +81,6 @@ export class AiService {
     }
 
     // P0 Fallback: Local Deterministic Rule-Based Heuristic Mapper
-    const localModelName = 'GrowEasy Local Rule-Based Mapper';
     if (onModelAttempt) onModelAttempt(localModelName, 'attempt');
     console.warn('All AI models exhausted. Falling back to local rule-based mapper.');
     const leads = this.mapLeadsLocally(rawRows);
