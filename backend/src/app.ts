@@ -57,6 +57,7 @@ app.post('/api/imports/:runId/confirm', uploadLimiter, ImportController.confirmI
 app.get('/api/imports/:runId/progress', ImportController.getProgressStream);
 app.get('/api/imports/history', ImportController.getHistory);
 app.get('/api/imports/:id', ImportController.getRunDetails);
+app.get('/api/leads', ImportController.getLeadsPaginated);
 app.delete('/api/leads/:id', ImportController.deleteLead);
 
 export default app;

@@ -102,8 +102,15 @@ export default function Home() {
   const [dbLeads, setDbLeads] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [isUploading, setIsUploading] = useState(false);
+
+  // Pagination states
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(50);
+  const [totalFiltered, setTotalFiltered] = useState(0);
+  const [totalUnique, setTotalUnique] = useState(0);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sseRef = useRef<EventSource | null>(null);
@@ -125,6 +132,22 @@ export default function Home() {
     };
   }, []);
 
+  // Debounce search query to prevent excessive network requests
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setPage(1); // Reset back to first page when filtering changes
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
+  // Fetch leads dynamically when pagination or filter states change
+  useEffect(() => {
+    if (serverState === 'online' || serverState === 'ready') {
+      fetchLeads(page, limit, debouncedSearch, statusFilter);
+    }
+  }, [page, limit, debouncedSearch, statusFilter, serverState]);
+
   const checkServerStatus = async () => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2500);
@@ -135,7 +158,6 @@ export default function Home() {
       if (res.ok) {
         setServerState('online');
         fetchHistory();
-        fetchLeads();
       } else {
         throw new Error('Server cold starting');
       }
@@ -173,7 +195,6 @@ export default function Home() {
   const handleStartApp = () => {
     setShowWakeModal(false);
     fetchHistory();
-    fetchLeads();
   };
 
   const fetchHistory = async () => {
@@ -188,30 +209,16 @@ export default function Home() {
     }
   };
 
-  const fetchLeads = async () => {
+  const fetchLeads = async (pageNumber = 1, pageSize = 50, query = '', status = 'ALL') => {
     try {
-      const res = await fetch(`${API_BASE}/imports/history`);
+      const res = await fetch(
+        `${API_BASE}/leads?page=${pageNumber}&limit=${pageSize}&search=${encodeURIComponent(query)}&status=${status}`
+      );
       if (res.ok) {
-        const runs = await res.json();
-        let allLeads: any[] = [];
-        for (const run of runs) {
-          if (run.status === 'COMPLETED') {
-            const detailRes = await fetch(`${API_BASE}/imports/${run.id}`);
-            if (detailRes.ok) {
-              const details = await detailRes.json();
-              if (details.leads) {
-                allLeads = [...allLeads, ...details.leads];
-              }
-            }
-          }
-        }
-        // EC: Sort dynamically by max(createdAt, updatedAt) descending so recently updated/created float to top
-        allLeads.sort((a, b) => {
-          const timeA = new Date(a.updatedAt || a.createdAt).getTime();
-          const timeB = new Date(b.updatedAt || b.createdAt).getTime();
-          return timeB - timeA;
-        });
-        setDbLeads(allLeads);
+        const data = await res.json();
+        setDbLeads(data.leads || []);
+        setTotalFiltered(data.totalFilteredCount || 0);
+        setTotalUnique(data.totalUniqueCount || 0);
       }
     } catch (err) {
       console.error('Failed to fetch database leads:', err);
@@ -458,7 +465,7 @@ export default function Home() {
             }
             fetchImportDetails(runId);
             fetchHistory();
-            fetchLeads();
+            fetchLeads(page, limit, debouncedSearch, statusFilter);
           } else if (update.status === 'FAILED') {
             // EC10: AI quota exhaustion or other terminal failure
             const errMsg = update.error || 'Import failed on the server. Please check your API key and try again.';
@@ -562,7 +569,7 @@ export default function Home() {
         method: 'DELETE'
       });
       if (res.ok) {
-        setDbLeads(prev => prev.filter(l => l.id !== leadId));
+        fetchLeads(page, limit, debouncedSearch, statusFilter);
       } else {
         const errData = await res.json();
         console.error('Delete failed:', errData.error);
@@ -629,19 +636,7 @@ export default function Home() {
     resetState();
   };
 
-  const filteredLeads = dbLeads.filter(lead => {
-    const query = searchQuery.toLowerCase();
-    const matchesSearch = (
-      (lead.name && lead.name.toLowerCase().includes(query)) ||
-      (lead.email && lead.email.toLowerCase().includes(query)) ||
-      (lead.company && lead.company.toLowerCase().includes(query)) ||
-      (lead.mobileWithoutCountryCode && lead.mobileWithoutCountryCode.includes(query))
-    );
-
-    const matchesStatus = statusFilter === 'ALL' || lead.crmStatus === statusFilter;
-
-    return matchesSearch && matchesStatus;
-  });
+  const filteredLeads = dbLeads;
 
   return (
     <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100 flex font-sans selection:bg-teal-500 selection:text-white relative overflow-hidden">
@@ -747,6 +742,39 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Quick Metrics Bar */}
+            <div className="px-8 py-5 border-b border-neutral-900/20 bg-neutral-950/10 grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-neutral-900/30 border border-neutral-900/60 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+                <div>
+                  <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider block">Total Database Leads</span>
+                  <span className="text-xl font-extrabold text-neutral-100 tracking-tight block mt-1">{totalUnique.toLocaleString()}</span>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-teal-500/10 flex items-center justify-center border border-teal-500/20 shadow-md shadow-teal-500/5">
+                  <Database className="w-5 h-5 text-teal-400 stroke-[2.2]" />
+                </div>
+              </div>
+
+              <div className="bg-neutral-900/30 border border-neutral-900/60 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+                <div>
+                  <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider block">Filtered Leads Matching Search</span>
+                  <span className="text-xl font-extrabold text-teal-400 tracking-tight block mt-1">{totalFiltered.toLocaleString()}</span>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 shadow-md shadow-emerald-500/5">
+                  <Search className="w-5 h-5 text-emerald-400 stroke-[2.2]" />
+                </div>
+              </div>
+
+              <div className="bg-neutral-900/30 border border-neutral-900/60 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+                <div>
+                  <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider block">Current Displayed Page</span>
+                  <span className="text-xl font-extrabold text-teal-400 tracking-tight block mt-1">Page {page} <span className="text-xs font-normal text-neutral-500">of {Math.max(1, Math.ceil(totalFiltered / limit))}</span></span>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center border border-purple-500/20 shadow-md shadow-purple-500/5">
+                  <Layers className="w-5 h-5 text-purple-400 stroke-[2.2]" />
+                </div>
+              </div>
+            </div>
+
             {/* ── Toolbar: search + refresh, or bulk-action bar when rows selected ── */}
             {selectedLeads.size > 0 ? (
               <div className="px-8 py-4 border-b border-neutral-900/20 bg-neutral-950/30 flex items-center gap-3 animate-in fade-in slide-in-from-top-1 duration-200">
@@ -818,8 +846,9 @@ export default function Home() {
 
                 <div className="flex gap-2.5 w-full lg:w-auto justify-end">
                   <button
-                    onClick={fetchLeads}
+                    onClick={() => fetchLeads(page, limit, debouncedSearch, statusFilter)}
                     className="p-2.5 bg-neutral-900/50 border border-neutral-800/80 rounded-xl text-neutral-400 hover:text-neutral-200 transition-all active:scale-[0.96]"
+                    title="Refresh leads list"
                   >
                     <RefreshCw className="w-4 h-4" />
                   </button>
@@ -946,6 +975,61 @@ export default function Home() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Pagination Footer */}
+                {totalFiltered > 0 && (
+                  <div className="px-6 py-4 bg-neutral-950/40 border-t border-neutral-900/40 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs">
+                    <div className="text-neutral-500 font-medium">
+                      Showing <span className="text-neutral-350 font-bold">{((page - 1) * limit) + 1}</span> to{' '}
+                      <span className="text-neutral-350 font-bold">{Math.min(page * limit, totalFiltered)}</span> of{' '}
+                      <span className="text-teal-400 font-bold">{totalFiltered}</span> leads (filtered from{' '}
+                      <span className="text-neutral-450 font-bold">{totalUnique}</span> total)
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      {/* Page size toggle */}
+                      <div className="flex items-center gap-1.5 mr-4">
+                        <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">Show:</span>
+                        <select
+                          value={limit}
+                          onChange={(e) => {
+                            setLimit(parseInt(e.target.value));
+                            setPage(1);
+                          }}
+                          className="bg-neutral-900 border border-neutral-800/80 rounded-lg px-2 py-1 text-[11px] text-neutral-300 focus:outline-none cursor-pointer"
+                        >
+                          <option value={10}>10</option>
+                          <option value={25}>25</option>
+                          <option value={50}>50</option>
+                          <option value={100}>100</option>
+                        </select>
+                      </div>
+
+                      {/* Page navigation buttons */}
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setPage(p => Math.max(1, p - 1))}
+                          disabled={page === 1}
+                          className="px-3 py-1.5 bg-neutral-900 border border-neutral-800/60 rounded-lg text-neutral-400 hover:text-neutral-200 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-semibold"
+                        >
+                          Previous
+                        </button>
+                        
+                        <div className="px-3 py-1.5 bg-neutral-950 border border-neutral-900/60 rounded-lg text-neutral-350 font-bold min-w-[2.5rem] text-center">
+                          {page}
+                        </div>
+                        
+                        <button
+                          onClick={() => setPage(p => (p * limit < totalFiltered ? p + 1 : p))}
+                          disabled={page * limit >= totalFiltered}
+                          className="px-3 py-1.5 bg-neutral-900 border border-neutral-800/60 rounded-lg text-neutral-400 hover:text-neutral-200 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-semibold"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

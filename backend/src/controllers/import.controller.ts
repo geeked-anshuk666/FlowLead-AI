@@ -275,4 +275,54 @@ export class ImportController {
       res.status(500).json({ error: error.message });
     }
   }
+
+  public static async getLeadsPaginated(req: Request, res: Response): Promise<void> {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const search = (req.query.search as string) || '';
+      const status = (req.query.status as string) || 'ALL';
+
+      const skip = (page - 1) * limit;
+
+      const where: any = {};
+      if (status && status !== 'ALL') {
+        where.crmStatus = status;
+      }
+      if (search) {
+        where.OR = [
+          { name: { contains: search, mode: 'insensitive' } },
+          { email: { contains: search, mode: 'insensitive' } },
+          { mobileWithoutCountryCode: { contains: search, mode: 'insensitive' } },
+          { company: { contains: search, mode: 'insensitive' } },
+          { city: { contains: search, mode: 'insensitive' } },
+          { state: { contains: search, mode: 'insensitive' } },
+          { country: { contains: search, mode: 'insensitive' } }
+        ];
+      }
+
+      // Query paginated results and total counts in parallel for optimal database performance
+      const [leads, totalFilteredCount, totalUniqueCount] = await Promise.all([
+        prisma.lead.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { createdAt: 'desc' }
+        }),
+        prisma.lead.count({ where }),
+        prisma.lead.count()
+      ]);
+
+      res.status(200).json({
+        leads,
+        totalUniqueCount,
+        totalFilteredCount,
+        page,
+        limit
+      });
+    } catch (error: any) {
+      console.error('Failed to query paginated leads:', error);
+      res.status(500).json({ error: error.message || 'Internal server error.' });
+    }
+  }
 }
