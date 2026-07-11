@@ -42,8 +42,13 @@ export class AiService {
         try {
           console.log(`Attempting AI mapping via OpenRouter model: ${model}...`);
           return await this.callOpenRouter(prompt, model);
-        } catch (err) {
-          console.warn(`OpenRouter model ${model} failed. Trying next fallback...`, err);
+        } catch (err: any) {
+          const errMsg = err?.message || String(err);
+          console.warn(`OpenRouter model ${model} failed. Trying next fallback...`, errMsg);
+          if (errMsg.includes('429')) {
+            console.log('Throttling OpenRouter next fallback attempt by 4s to avoid request limits...');
+            await new Promise(r => setTimeout(r, 4000));
+          }
         }
       }
     }
@@ -62,7 +67,7 @@ export class AiService {
 
 
   private static async callOpenRouter(prompt: string, model: string): Promise<any[]> {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    let response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${this.openrouterKey}`,
@@ -76,6 +81,25 @@ export class AiService {
         response_format: { type: 'json_object' }
       })
     });
+
+    // If model does not support response_format: json_object (returns 400 Bad Request),
+    // retry without the response_format parameter.
+    if (response.status === 400) {
+      console.warn(`Model ${model} rejected json_object format. Retrying in text mode...`);
+      response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.openrouterKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://groweasy.ai',
+          'X-Title': 'GrowEasy CSV Importer'
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+    }
 
     if (!response.ok) {
       throw new Error(`OpenRouter API error: Status ${response.status}`);
