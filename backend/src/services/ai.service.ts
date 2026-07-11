@@ -90,6 +90,7 @@ export class AiService {
 
   private static mapLeadsLocally(rawRows: any[]): any[] {
     const mapped: any[] = [];
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     for (const row of rawRows) {
       // Find keys in the row case-insensitively
@@ -101,11 +102,31 @@ export class AiService {
         return null;
       };
 
-      const email = findVal(['email', 'mail']);
+      let email = findVal(['email', 'mail']);
       const phone = findVal(['phone', 'mobile', 'num', 'contact']);
 
-      // Guard: must have either email or phone
-      if (!email && !phone) continue;
+      // Validate email format
+      if (email && !emailRegex.test(email)) {
+        email = null;
+      }
+
+      // Format notes from leftover unmapped columns
+      const leftoverNotes: string[] = [];
+      for (const [key, val] of Object.entries(row)) {
+        const lowerKey = key.toLowerCase();
+        if (
+          !lowerKey.includes('name') &&
+          !lowerKey.includes('email') &&
+          !lowerKey.includes('phone') &&
+          !lowerKey.includes('mobile') &&
+          !lowerKey.includes('city') &&
+          !lowerKey.includes('state') &&
+          !lowerKey.includes('country') &&
+          !lowerKey.includes('company')
+        ) {
+          leftoverNotes.push(`${key}: ${val}`);
+        }
+      }
 
       // Extract country code if present (e.g. +91 9999999999)
       let countryCode = '+91';
@@ -118,6 +139,11 @@ export class AiService {
         }
       }
       cleanPhone = cleanPhone.replace(/[^0-9]/g, '');
+
+      // Guard: must have either valid email or valid phone
+      if (!email && cleanPhone.length < 6) {
+        continue;
+      }
 
       // Parse status
       let crmStatus = 'GOOD_LEAD_FOLLOW_UP';
@@ -142,29 +168,11 @@ export class AiService {
         }
       }
 
-      // Format notes from leftover unmapped columns
-      const leftoverNotes: string[] = [];
-      for (const [key, val] of Object.entries(row)) {
-        const lowerKey = key.toLowerCase();
-        if (
-          !lowerKey.includes('name') &&
-          !lowerKey.includes('email') &&
-          !lowerKey.includes('phone') &&
-          !lowerKey.includes('mobile') &&
-          !lowerKey.includes('city') &&
-          !lowerKey.includes('state') &&
-          !lowerKey.includes('country') &&
-          !lowerKey.includes('company')
-        ) {
-          leftoverNotes.push(`${key}: ${val}`);
-        }
-      }
-
       mapped.push({
         name: findVal(['name', 'firstname', 'lastname', 'owner', 'contactperson']) || 'Unknown Lead',
         email: email,
         country_code: countryCode,
-        mobile_without_country_code: cleanPhone,
+        mobile_without_country_code: cleanPhone || null,
         company: findVal(['company', 'firm', 'org']),
         city: findVal(['city', 'town']),
         state: findVal(['state', 'region']),
@@ -285,10 +293,37 @@ ${JSON.stringify(rawRows, null, 2)}
   private static parseJsonResponse(text: string): any[] {
     // Strip markdown formatting if the model ignored instructions
     let cleanText = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const phoneRegex = /[0-9]{6,}/;
+
+    const sanitizeLeadsList = (leads: any[]): any[] => {
+      if (!Array.isArray(leads)) return [];
+      return leads
+        .map(lead => {
+          let email = lead.email ? String(lead.email).trim() : null;
+          let phone = lead.mobile_without_country_code ? String(lead.mobile_without_country_code).replace(/[^0-9]/g, '') : null;
+
+          if (email && !emailRegex.test(email)) {
+            email = null;
+          }
+          if (phone && !phoneRegex.test(phone)) {
+            phone = null;
+          }
+
+          return {
+            ...lead,
+            email,
+            mobile_without_country_code: phone
+          };
+        })
+        .filter(lead => lead.email || lead.mobile_without_country_code);
+    };
 
     try {
       const parsed = JSON.parse(cleanText);
-      if (parsed && Array.isArray(parsed.leads)) return parsed.leads;
+      if (parsed && Array.isArray(parsed.leads)) {
+        return sanitizeLeadsList(parsed.leads);
+      }
     } catch (err) {
       console.warn('Standard JSON parse failed. Attempting regex extraction...', err);
     }
@@ -298,7 +333,9 @@ ${JSON.stringify(rawRows, null, 2)}
     if (arrayMatch) {
       try {
         const parsedArray = JSON.parse(arrayMatch[0]);
-        if (Array.isArray(parsedArray)) return parsedArray;
+        if (Array.isArray(parsedArray)) {
+          return sanitizeLeadsList(parsedArray);
+        }
       } catch (e) {
         console.error('Regex extraction JSON parse failed:', e);
       }

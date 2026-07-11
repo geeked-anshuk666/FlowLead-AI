@@ -92,15 +92,27 @@ export class CsvService {
     const valid: any[] = [];
     let skippedCount = 0;
 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const phoneRegex = /[0-9]{6,}/; // Must contain at least 6 digits somewhere in the contact field
+
     for (const row of rows) {
       // After header normalization, keys are already lowercase snake_case
       const keys = Object.keys(row);
+      
       const hasEmail = keys.some(key => {
-        return (key.includes('email') || key.includes('mail')) && row[key] && String(row[key]).trim() !== '';
+        if ((key.includes('email') || key.includes('mail')) && row[key]) {
+          const val = String(row[key]).trim();
+          return emailRegex.test(val);
+        }
+        return false;
       });
 
       const hasPhone = keys.some(key => {
-        return (key.includes('phone') || key.includes('mobile') || key.includes('contact') || key.includes('num')) && row[key] && String(row[key]).trim() !== '';
+        if ((key.includes('phone') || key.includes('mobile') || key.includes('contact') || key.includes('num')) && row[key]) {
+          const val = String(row[key]).replace(/[^0-9]/g, '');
+          return phoneRegex.test(val);
+        }
+        return false;
       });
 
       if (hasEmail || hasPhone) {
